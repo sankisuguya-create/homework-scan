@@ -60,8 +60,8 @@ button{cursor:pointer;touch-action:manipulation}
 .net.off{background:var(--warn)}
 .tbtn{min-height:56px;font-size:20px}
 
-.sumbar{display:flex;align-items:center;gap:16px;padding:8px 16px;border-bottom:var(--thin);flex-wrap:wrap}
-.sum{display:flex;gap:12px;flex-wrap:wrap;flex:1}
+.sumbar{display:flex;align-items:center;gap:16px;padding:6px 16px;border-bottom:var(--thin)}
+.sum{display:flex;gap:10px;flex-wrap:wrap;flex:1}
 .chip .fg{font-size:20px;padding:0 8px;border:2px solid var(--ink);border-radius:6px;background:var(--warn);color:var(--ink)}
 .chip .dg{font-size:20px;padding:0 8px;border:2px solid var(--ink);border-radius:6px;background:var(--paper);color:var(--ink);display:inline-flex;align-items:center;gap:4px}
 .chip .dg .gm{width:18px;height:18px}
@@ -69,24 +69,25 @@ button{cursor:pointer;touch-action:manipulation}
 .legend .lg{width:34px;height:34px;display:inline-flex;align-items:center;justify-content:center;border:2px solid var(--ink);font-size:22px;font-weight:800;border-radius:4px}
 .legend .arr{font-size:16px}
 .gm{width:1.05em;height:1.05em;display:block}
-.chip{display:flex;align-items:center;gap:8px;padding:4px 16px;border:var(--thin);border-radius:999px;font-size:22px;font-weight:700}
-.chip .ic{width:30px;height:30px}
-.chip .left{font-size:26px}
+.chip{display:flex;align-items:center;gap:8px;padding:2px 14px;border:var(--thin);border-radius:999px;font-size:20px;font-weight:700;white-space:nowrap}
+.chip .ic{width:26px;height:26px}
+.chip .left{font-size:24px}
 .chip.all{background:var(--done);color:var(--on-done);border-color:var(--done)}
 
 .panes{flex:1;display:grid;grid-template-columns:1fr 1fr;gap:20px;padding:10px 16px 12px;min-height:0}
-.pane{display:grid;min-height:0;border:var(--line);border-radius:var(--r);overflow:hidden}
+/* 行の高さ（--rh）に合わせて字の大きさを決める。品目や人数が増えても字がはみ出さない */
+.pane{display:grid;min-height:0;border:var(--line);border-radius:var(--r);overflow:hidden;container-type:size;--rh:calc(100cqh / var(--rows, 19))}
 .pane .row{display:grid;grid-template-columns:var(--cols);border-top:var(--thin);min-height:0}
 .pane .row:first-child{border-top:0}
 .pane .head{background:var(--ink);color:var(--paper)}
 .pane .head > div{display:flex;align-items:center;justify-content:center;gap:6px;font-weight:700;font-size:clamp(14px,1.4vw,20px);padding:4px;text-align:center;line-height:1.15}
 .pane .head .ic{width:1.5em;height:1.5em}
 .pane .who{display:flex;align-items:center;gap:10px;padding:0 10px;min-width:0}
-.pane .no{font-size:clamp(20px,2.3vh + .6vw,34px);font-weight:800;min-width:1.6em;text-align:right;font-variant-numeric:tabular-nums}
-.pane .nm{font-size:clamp(16px,1.8vh + .5vw,26px);font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pane .no{font-size:clamp(14px,calc(var(--rh) * .62),34px);font-weight:800;min-width:1.6em;text-align:right;font-variant-numeric:tabular-nums}
+.pane .nm{font-size:clamp(12px,calc(var(--rh) * .5),26px);font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 /* マス。状態は「文字（○休忘△）＋色」で示す。色だけでは区別させない */
 .cell{display:flex;align-items:center;justify-content:center;border:0;border-left:var(--thin);background:var(--paper);
-  padding:0;min-height:0;font-weight:800;color:var(--ink);font-size:clamp(20px,3.6vh,40px);line-height:1}
+  padding:0;min-height:0;font-weight:800;color:var(--ink);font-size:clamp(14px,calc(var(--rh) * .72),40px);line-height:1;overflow:hidden}
 .cell .g{display:block}
 .s-on{background:var(--done);color:var(--on-done)}
 .s-rest{background:var(--soft);color:var(--ink)}
@@ -167,7 +168,7 @@ textarea{border:var(--thin);border-radius:6px;padding:10px;font-size:18px;width:
 
 .tbl{border-collapse:collapse;font-size:20px}
 .tbl th,.tbl td{border:var(--thin);padding:6px 10px;text-align:left;vertical-align:middle}
-.tbl thead th{background:var(--ink);color:var(--paper);position:sticky;top:76px;z-index:2}
+.tbl thead th{background:var(--ink);color:var(--paper)}
 .tbl td.num,.tbl th.num{text-align:right;font-variant-numeric:tabular-nums}
 .tbl tr.flag td{background:#FFF3C4}
 .tbl .mk{display:inline-flex;align-items:center;gap:6px;font-weight:800;padding:2px 10px;border-radius:6px}
@@ -1414,7 +1415,7 @@ var Helper = (function(){
   function paintSummary(){ var s = root && root.querySelector(".sum"); if(s) s.innerHTML = summaryHtml(); }
 
   function paneHtml(list, rows, cols, cells, named){
-    var h = '<div class="pane" style="--cols:' + cols + ';grid-template-rows:auto repeat(' + rows + ',1fr)">';
+    var h = '<div class="pane" style="--cols:' + cols + ';--rows:' + (rows + 1) + ';grid-template-rows:auto repeat(' + rows + ',minmax(0,1fr))">';
     h += '<div class="row head"><div>' + (named ? 'ばん・なまえ' : 'ばん') + '</div>'
        + S.items.map(function(it){ return '<div>' + icon(it.icon) + '<span>' + esc(it.name) + '</span></div>'; }).join("")
        + '</div>';
@@ -1450,7 +1451,8 @@ var Helper = (function(){
       ? '<div class="net" title="保存できています">' + icon("cloud") + '<span class="sr">保存できています</span></div>'
       : '<div class="net off" role="status">' + icon("cloudOff") + 'つながっていません（しるしは この PC に のこっています）</div>';
     var head = '<div class="hbar"><div class="date">' + esc(dateLabel(S.date, S.wd)) + '</div>'
-      + '<div class="title">' + icon("check") + 'しゅくだい チェック</div><div class="grow"></div>' + net
+      + '<div class="title">' + icon("check") + 'しゅくだい チェック</div><div class="grow"></div>'
+      + (S.roster.length && S.items.length ? legend() : '') + net
       + '<button class="btn tbtn" data-act="teacher">' + icon("lock") + '先生</button></div>';
 
     var body;
@@ -1464,7 +1466,7 @@ var Helper = (function(){
       var rows = Math.max(SPLIT, L.length, R.length);
       var named = S.roster.some(function(r){ return r.name; });
       var cols = (named ? "minmax(0,2.2fr)" : "minmax(0,.8fr)") + " repeat(" + S.items.length + ",minmax(0,1fr))";
-      body = '<div class="sumbar"><div class="sum">' + summaryHtml() + '</div>' + legend() + '</div>'
+      body = '<div class="sumbar"><div class="sum">' + summaryHtml() + '</div></div>'
            + '<div class="panes">' + paneHtml(L, rows, cols, cells, named) + paneHtml(R, rows, cols, cells, named) + '</div>';
     }
     root.innerHTML = '<div class="helper">' + head + body + '</div>';

@@ -149,7 +149,7 @@ var Helper = (function(){
   function paintSummary(){ var s = root && root.querySelector(".sum"); if(s) s.innerHTML = summaryHtml(); }
 
   function paneHtml(list, rows, cols, cells, named){
-    var h = '<div class="pane" style="--cols:' + cols + ';grid-template-rows:auto repeat(' + rows + ',1fr)">';
+    var h = '<div class="pane" style="--cols:' + cols + ';--rows:' + (rows + 1) + ';grid-template-rows:auto repeat(' + rows + ',minmax(0,1fr))">';
     h += '<div class="row head"><div>' + (named ? 'ばん・なまえ' : 'ばん') + '</div>'
        + S.items.map(function(it){ return '<div>' + icon(it.icon) + '<span>' + esc(it.name) + '</span></div>'; }).join("")
        + '</div>';
@@ -185,7 +185,8 @@ var Helper = (function(){
       ? '<div class="net" title="保存できています">' + icon("cloud") + '<span class="sr">保存できています</span></div>'
       : '<div class="net off" role="status">' + icon("cloudOff") + 'つながっていません（しるしは この PC に のこっています）</div>';
     var head = '<div class="hbar"><div class="date">' + esc(dateLabel(S.date, S.wd)) + '</div>'
-      + '<div class="title">' + icon("check") + 'しゅくだい チェック</div><div class="grow"></div>' + net
+      + '<div class="title">' + icon("check") + 'しゅくだい チェック</div><div class="grow"></div>'
+      + (S.roster.length && S.items.length ? legend() : '') + net
       + '<button class="btn tbtn" data-act="teacher">' + icon("lock") + '先生</button></div>';
 
     var body;
@@ -199,7 +200,7 @@ var Helper = (function(){
       var rows = Math.max(SPLIT, L.length, R.length);
       var named = S.roster.some(function(r){ return r.name; });
       var cols = (named ? "minmax(0,2.2fr)" : "minmax(0,.8fr)") + " repeat(" + S.items.length + ",minmax(0,1fr))";
-      body = '<div class="sumbar"><div class="sum">' + summaryHtml() + '</div>' + legend() + '</div>'
+      body = '<div class="sumbar"><div class="sum">' + summaryHtml() + '</div></div>'
            + '<div class="panes">' + paneHtml(L, rows, cols, cells, named) + paneHtml(R, rows, cols, cells, named) + '</div>';
     }
     root.innerHTML = '<div class="helper">' + head + body + '</div>';
