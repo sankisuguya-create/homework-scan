@@ -101,12 +101,12 @@ function setupSheets(){
    入口。通らない人には画面もデータも渡さない。
 ------------------------------------------------------------------ */
 function doGet(e){
-  var j = Gate.judge(Gate.activeEmail());
-  if(!j.ok) return Gate.denyPage(j);
+  var w = Gate.who();
+  if(w.role === "none") return Gate.denyPage(w);
   var q = (e && e.parameter) || {};
-  var view = q.view === "teacher" ? "teacher" : "helper";
+  var view = (w.role === "staff" && q.view === "teacher") ? "teacher" : "helper";
   var t = HtmlService.createTemplateFromFile("Index");
-  t.boot = JSON.stringify({view:view, url:P.url()});
+  t.boot = JSON.stringify({view:view, url:P.url(), role:w.role});
   return t.evaluate()
     .setTitle("宿題チェック")
     .addMetaTag("viewport", "width=device-width, initial-scale=1")

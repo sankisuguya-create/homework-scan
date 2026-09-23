@@ -22,7 +22,8 @@ var TABLES = {
   "欠席":     ["日付", "番号"],
   "免除":     ["開始日", "終了日", "番号", "枠", "メモ"],
   "操作記録": ["時刻", "種類", "内容", "利用者"],
-  "設定":     ["項目", "値"]
+  "設定":     ["項目", "値"],
+  "係":       ["メールアドレス", "いつまで", "メモ"]
 };
 var ICONS = ["book", "calc", "note", "pencil", "paper", "star", "music", "bag", "abc"];
 var ITEM_COLORS = ["blue", "red", "green"];   /* 品目の列の色。名前は係の画面の t-… に対応 */
@@ -51,7 +52,8 @@ var OP_R = invert(OP), VIA_R = invert(VIA);
 OP_R["取消"] = "off";
 
 /* ── 関門 ───────────────────────────────── */
-function guard(){ return P.email(); }
+function guard(){ return P.email(); }              /* staff（教職員）だけ */
+function guardAny(){ return Gate.checkAny(); }     /* staff または 係の児童 */
 function teacher(token){
   var email = guard();
   var t = String(token || "");
@@ -161,7 +163,7 @@ function helperState(){
           cells:v.cells, excused:v.excused, hasPin: !!P.prop("PIN_HASH"), now:P.now()};
 }
 function apiToday(){
-  guard();
+  guardAny();
   return helperState();
 }
 
@@ -172,7 +174,7 @@ function apiToday(){
    きょう以外の日を直すのは先生だけ（token が要る）。過ぎた日の直しはその日の 23:59:59 に置き、
    その日のどの記録よりも後（＝いまの状態）にする。 */
 function apiMark(events, token){
-  var email = guard();
+  var email = guardAny().email;
   var isTeacher = false;
   if(token){ try{ teacher(token); isTeacher = true; }catch(err){ isTeacher = false; } }
   var now = P.now(), date0 = today(), recv = Domain.jstStamp(now);
@@ -221,7 +223,7 @@ function log(kind, detail, email){
                          String(detail || "").slice(0, 200), email || ""]]);
 }
 function apiLog(kind, detail){
-  var email = guard();
+  var email = guardAny().email;
   if(!LOG_KINDS[kind] || kind === "unlock" || kind === "unlock-ng") return false;
   log(kind, detail, email);
   return true;
@@ -310,9 +312,21 @@ function apiSetAbsent(token, date, nos){
   });
   return apiTeacherDay(token, date);
 }
+/* 係の画面を開ける児童。いつまでは学期末（3/31・8/31・12/31）が上限。
+   空のまま保存すると学期末の日付が入る（Gate.who と同じ決まり） */
+function readHelpers(){
+  var t = today();
+  return P.rows("係").map(function(r){
+    var e = Gate.norm(r[0]);
+    if(!e || e.indexOf("@") < 0) return null;
+    var until = Domain.asDate(r[1]);
+    return {email:e, until:until, memo:String(r[2] || ""), active: !!(until && t <= until)};
+  }).filter(function(x){ return !!x; });
+}
 function apiSetup(token){
   teacher(token);
   return {roster:readRoster(), slots:readSlots(), exemptions:readExemptions(),
+          helpers:readHelpers(),
           settings:readSettings(), icons:ICONS, url:P.url(), today:today()};
 }
 function apiSaveRoster(token, list){
@@ -357,6 +371,20 @@ function apiSaveExemptions(token, list){
     rows.push([from, to, no, slot || "", String(x.memo || "").slice(0, 100)]);
   });
   P.lock(function(){ P.replace("免除", rows); });
+  return apiSetup(token);
+}
+function apiSaveHelpers(token, list){
+  teacher(token);
+  var seen = {}, rows = [], cap = Domain.termEnd(today());
+  (list || []).slice(0, 100).forEach(function(h){
+    var e = Gate.norm(h && h.email);
+    var at = e.lastIndexOf("@");
+    if(!e || at <= 0 || at === e.length - 1 || /\s/.test(e) || seen[e]) return;
+    seen[e] = true;
+    var u = Domain.asDate(h && h.until);
+    rows.push([e, (u && u < cap) ? u : cap, String(h && h.memo || "").slice(0, 60)]);
+  });
+  P.lock(function(){ P.replace("係", rows); });
   return apiSetup(token);
 }
 function apiSaveSettings(token, s){

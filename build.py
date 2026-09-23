@@ -26,7 +26,8 @@ OUT_DEMO = ROOT / "dist" / "demo.html"
 INCLUDE = re.compile(r'^([ \t]*)/\* @include ([\w./\-]+) \*/[ \t]*$', re.M)
 DEMO_SCRIPTS = ["../gas/Api.gs", "js/mock-platform.js", "js/demo-seed.js", "js/mock-run.js"]
 DEMO_BOOT = ('{view: /teacher/.test(location.hash) ? "teacher" : "helper", '
-             'url: "", demo: true}')
+             'url: "", demo: true, '
+             'role: /helper/.test(location.hash) ? "helper" : "staff"}')
 BANNER = ("<!-- このファイルは src/ から build.py が作る。\n"
           "     直すのは src/ のほう。ここを直しても次のビルドで消える。 -->\n")
 

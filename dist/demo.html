@@ -216,7 +216,7 @@ textarea{border:var(--thin);border-radius:6px;padding:10px;font-size:18px;width:
 <body>
 <div id="app"></div>
 <script>
-var BOOT = {view: /teacher/.test(location.hash) ? "teacher" : "helper", url: "", demo: true};
+var BOOT = {view: /teacher/.test(location.hash) ? "teacher" : "helper", url: "", demo: true, role: /helper/.test(location.hash) ? "helper" : "staff"};
 </script>
 <script>
 /* ==================================================================
@@ -295,6 +295,15 @@ var Domain = (function(){
   function weekday(date){
     var p = date.split("-").map(Number);
     return "日月火水木金土".charAt(new Date(Date.UTC(p[0], p[1] - 1, p[2])).getUTCDay());
+  }
+
+  /* 係の期限の上限。学期の終わり（3月末・8月末・12月末）のうち、
+     date 以上でいちばん近いものを返す。date は "YYYY-MM-DD" */
+  function termEnd(date){
+    var y = Number(date.slice(0, 4));
+    var ends = [y + "-03-31", y + "-08-31", y + "-12-31", (y + 1) + "-03-31"];
+    for(var i = 0; i < ends.length; i++) if(ends[i] >= date) return ends[i];
+    return (y + 1) + "-03-31";
   }
 
   function toInt(v){
@@ -500,7 +509,7 @@ var Domain = (function(){
     SLOTS:SLOTS, STATES:STATES, isState:isState, nextState:nextState, counts:counts,
     pad:pad, jstDate:jstDate, jstStamp:jstStamp, jstParts:jstParts,
     stampMinutes:stampMinutes, hhmm:hhmm, isDate:isDate, asDate:asDate, asStamp:asStamp,
-    addDays:addDays, weekday:weekday, toInt:toInt,
+    addDays:addDays, weekday:weekday, toInt:toInt, termEnd:termEnd,
     isExempt:isExempt, finalMarks:finalMarks, dayView:dayView, dayDetail:dayDetail,
     stats:stats, parseRoster:parseRoster
   };
@@ -531,7 +540,8 @@ var TABLES = {
   "欠席":     ["日付", "番号"],
   "免除":     ["開始日", "終了日", "番号", "枠", "メモ"],
   "操作記録": ["時刻", "種類", "内容", "利用者"],
-  "設定":     ["項目", "値"]
+  "設定":     ["項目", "値"],
+  "係":       ["メールアドレス", "いつまで", "メモ"]
 };
 var ICONS = ["book", "calc", "note", "pencil", "paper", "star", "music", "bag", "abc"];
 var ITEM_COLORS = ["blue", "red", "green"];   /* 品目の列の色。名前は係の画面の t-… に対応 */
@@ -560,7 +570,8 @@ var OP_R = invert(OP), VIA_R = invert(VIA);
 OP_R["取消"] = "off";
 
 /* ── 関門 ───────────────────────────────── */
-function guard(){ return P.email(); }
+function guard(){ return P.email(); }              /* staff（教職員）だけ */
+function guardAny(){ return Gate.checkAny(); }     /* staff または 係の児童 */
 function teacher(token){
   var email = guard();
   var t = String(token || "");
@@ -670,7 +681,7 @@ function helperState(){
           cells:v.cells, excused:v.excused, hasPin: !!P.prop("PIN_HASH"), now:P.now()};
 }
 function apiToday(){
-  guard();
+  guardAny();
   return helperState();
 }
 
@@ -681,7 +692,7 @@ function apiToday(){
    きょう以外の日を直すのは先生だけ（token が要る）。過ぎた日の直しはその日の 23:59:59 に置き、
    その日のどの記録よりも後（＝いまの状態）にする。 */
 function apiMark(events, token){
-  var email = guard();
+  var email = guardAny().email;
   var isTeacher = false;
   if(token){ try{ teacher(token); isTeacher = true; }catch(err){ isTeacher = false; } }
   var now = P.now(), date0 = today(), recv = Domain.jstStamp(now);
@@ -730,7 +741,7 @@ function log(kind, detail, email){
                          String(detail || "").slice(0, 200), email || ""]]);
 }
 function apiLog(kind, detail){
-  var email = guard();
+  var email = guardAny().email;
   if(!LOG_KINDS[kind] || kind === "unlock" || kind === "unlock-ng") return false;
   log(kind, detail, email);
   return true;
@@ -819,9 +830,21 @@ function apiSetAbsent(token, date, nos){
   });
   return apiTeacherDay(token, date);
 }
+/* 係の画面を開ける児童。いつまでは学期末（3/31・8/31・12/31）が上限。
+   空のまま保存すると学期末の日付が入る（Gate.who と同じ決まり） */
+function readHelpers(){
+  var t = today();
+  return P.rows("係").map(function(r){
+    var e = Gate.norm(r[0]);
+    if(!e || e.indexOf("@") < 0) return null;
+    var until = Domain.asDate(r[1]);
+    return {email:e, until:until, memo:String(r[2] || ""), active: !!(until && t <= until)};
+  }).filter(function(x){ return !!x; });
+}
 function apiSetup(token){
   teacher(token);
   return {roster:readRoster(), slots:readSlots(), exemptions:readExemptions(),
+          helpers:readHelpers(),
           settings:readSettings(), icons:ICONS, url:P.url(), today:today()};
 }
 function apiSaveRoster(token, list){
@@ -866,6 +889,20 @@ function apiSaveExemptions(token, list){
     rows.push([from, to, no, slot || "", String(x.memo || "").slice(0, 100)]);
   });
   P.lock(function(){ P.replace("免除", rows); });
+  return apiSetup(token);
+}
+function apiSaveHelpers(token, list){
+  teacher(token);
+  var seen = {}, rows = [], cap = Domain.termEnd(today());
+  (list || []).slice(0, 100).forEach(function(h){
+    var e = Gate.norm(h && h.email);
+    var at = e.lastIndexOf("@");
+    if(!e || at <= 0 || at === e.length - 1 || /\s/.test(e) || seen[e]) return;
+    seen[e] = true;
+    var u = Domain.asDate(h && h.until);
+    rows.push([e, (u && u < cap) ? u : cap, String(h && h.memo || "").slice(0, 60)]);
+  });
+  P.lock(function(){ P.replace("係", rows); });
   return apiSetup(token);
 }
 function apiSaveSettings(token, s){
@@ -979,7 +1016,13 @@ var P = (function(){
 })();
 
 var Gate = (typeof Gate !== "undefined") ? Gate : {
-  check: function(){ return {ok:true, email:"demo@edu.nishi.or.jp"}; }
+  check: function(){ return {ok:true, email:"demo@edu.nishi.or.jp"}; },
+  who: function(){ return {role:"staff", email:"demo@edu.nishi.or.jp", code:""}; },
+  checkAny: function(){ return {role:"staff", email:"demo@edu.nishi.or.jp", code:""}; },
+  norm: function(raw){
+    var e = String(raw == null ? "" : raw);
+    return e.trim().toLowerCase();
+  }
 };
 </script>
 <script>
@@ -1056,7 +1099,7 @@ var google = {script: {run: (function(){
     };
     ["apiToday", "apiMark", "apiLog", "apiUnlock", "apiSetPin", "apiLock", "apiTeacherDay",
      "apiSaveDay", "apiSetAbsent", "apiSetup", "apiSaveRoster", "apiSaveSlots",
-     "apiSaveExemptions", "apiSaveSettings", "apiStats", "apiLogs"].forEach(function(name){
+     "apiSaveExemptions", "apiSaveSettings", "apiStats", "apiLogs", "apiSaveHelpers"].forEach(function(name){
       r[name] = function(){
         var args = JSON.parse(JSON.stringify(Array.prototype.slice.call(arguments)));
         setTimeout(function(){
@@ -1481,7 +1524,7 @@ var Helper = (function(){
     var head = '<div class="hbar"><div class="date">' + esc(dateLabel(S.date, S.wd)) + '</div>'
       + '<div class="title">' + icon("check") + 'しゅくだい チェック</div><div class="grow"></div>'
       + (S.roster.length && S.items.length ? legend() : '') + net
-      + '<button class="btn tbtn" data-act="teacher">' + icon("lock") + '先生</button></div>';
+      + (BOOT.role === "helper" ? '' : '<button class="btn tbtn" data-act="teacher">' + icon("lock") + '先生</button>') + '</div>';
 
     var body;
     if(!S.roster.length){
@@ -1785,12 +1828,34 @@ var Teacher = (function(){
             + '<td><input type="checkbox" data-f="daily" style="width:32px;height:32px"' + (s.daily ? " checked" : "") + '></td></tr>';
         }).join("") + '</tbody></table></div>'
       + '<div class="line"><button class="btn primary" data-t="sl-save">' + icon("save") + '品目を 保存</button></div></div>';
+
+    var hp = SU.helpers || [];
+    h += '<div class="sec"><h2>' + icon("hand") + '係の画面を 開ける児童（' + hp.length + '人）</h2>'
+      + '<p class="note">ここに入れた児童は、自分のアドレスで このアプリを開くと 係の画面（きょうの入力）だけが見えます。'
+      + '先生の画面には どの方法でも入れません。期限は学期の終わり（3月・8月・12月）までで、それより後は自動で 切れます。'
+      + 'もっと早くおわらせたいときだけ、日付を入れてください。</p>'
+      + '<div style="overflow-x:auto"><table class="tbl"><thead><tr><th>メールアドレス</th><th>いつまで</th><th>メモ</th><th></th></tr></thead><tbody>'
+      + (hp.length ? hp.map(function(x, i){
+          return '<tr data-hp="' + i + '"' + (x.active ? '' : ' style="opacity:.55"') + '><td><input type="email" data-f="email" value="' + esc(x.email) + '" style="width:22em"></td>'
+            + '<td><input type="date" data-f="until" value="' + esc(x.until) + '"></td>'
+            + '<td><input type="text" data-f="memo" maxlength="60" value="' + esc(x.memo) + '" style="width:14em"></td>'
+            + '<td><button class="btn small" data-t="hp-del" data-i="' + i + '">' + icon("trash") + 'けす</button></td></tr>';
+        }).join("") : '<tr><td colspan="4">まだ ありません</td></tr>')
+      + '</tbody></table></div><div class="line">'
+      + '<button class="btn" data-t="hp-add">' + icon("plus") + '1人 たす</button>'
+      + '<button class="btn primary" data-t="hp-save">' + icon("save") + '係を 保存</button></div></div>';
     return h;
   }
   function readRosterTable(){
     return $$("[data-ro]", root).map(function(tr){
       return {no:Number($('[data-f="no"]', tr).value), name:$('[data-f="name"]', tr).value.trim()};
     });
+  }
+  function readHelpersTable(){
+    return $$("[data-hp]", root).map(function(tr){
+      return {email:$('[data-f="email"]', tr).value.trim(), until:$('[data-f="until"]', tr).value,
+              memo:$('[data-f="memo"]', tr).value.trim()};
+    }).filter(function(h){ return h.email; });
   }
 
   /* ────────── せってい ────────── */
@@ -1880,6 +1945,9 @@ var Teacher = (function(){
       if(dup.length){ toast(dup[0].no + "番が 2人 います", true); return; }
       return tcall("apiSaveRoster", list).then(function(r){ SU = r; roster = null; D = null; ST = null; show(); toast("名簿を保存しました"); });
     }
+    if(t === "hp-add"){ SU.helpers = readHelpersTable(); SU.helpers.push({email:"", until:"", memo:"", active:true}); return show(); }
+    if(t === "hp-del"){ SU.helpers = readHelpersTable(); SU.helpers.splice(Number(b.getAttribute("data-i")), 1); return show(); }
+    if(t === "hp-save") return tcall("apiSaveHelpers", readHelpersTable()).then(function(r){ SU = r; show(); toast("係を 保存しました"); });
     if(t === "sl-save"){
       var slots = $$("[data-sl]", root).map(function(tr){
         var p = $('[data-icon][aria-pressed="true"]', tr);
@@ -1931,6 +1999,9 @@ var Teacher = (function(){
    ■ 係の画面を終えるのも、先生の暗証番号のあとだけ。
    ■ 全画面が外れても、係の児童が他の画面を見ることはできても、
      表を触ったり先生の画面に入ったりはできない。
+   ■ BOOT.role === "helper"（係の児童のアドレスで開いた）ときは
+     先生につながる入口を出さない。全画面が外れても暗証番号なしで
+     もどせる（見えるのは係の表だけだから）。先生の口はサーバ側でも閉じてある。
 
    ※ Apps Script の画面は iframe の中に埋め込めない（外のページからの
      キー横取り＝Keyboard Lock も届かない）ので、Esc を横取りする
@@ -1939,6 +2010,7 @@ var Teacher = (function(){
 var Guard = (function(){
   var state = "start";      /* start | running | away | teacher | finished */
   var finishing = false, app = null, idle = null;
+  var HELPER = (typeof BOOT !== "undefined" && BOOT && BOOT.role === "helper");
   var IDLE_MS = 5 * 60 * 1000;
 
   function log(kind, detail){ call("apiLog", kind, detail || "").catch(function(){}); }
@@ -1973,10 +2045,11 @@ var Guard = (function(){
       + '<p>係の画面は 全画面で ひらきます。</p>'
       + '<button class="btn big primary" data-g="go">' + icon("expand") + 'はじめる</button>'
       + '<div class="line" style="justify-content:center">'
-      +   '<button class="btn" data-g="teacher">' + icon("lock") + '先生の画面</button>'
+      +   (HELPER ? '' : '<button class="btn" data-g="teacher">' + icon("lock") + '先生の画面</button>')
       +   '<button class="btn" data-g="nofs">' + icon("hand") + '全画面に しないで ひらく</button>'
       + '</div>'
-      + '<p class="note" style="max-width:36em">全画面は Esc キーで外れます（外れると表が隠れ、先生の暗証番号が要ります）。</p>'
+      + '<p class="note" style="max-width:36em">全画面は Esc キーで外れます（外れると表が隠れ'
+      +   (HELPER ? 'ます）。' : '、先生の暗証番号が要ります）。') + '</p>'
       + '</div>';
   }
 
@@ -1993,6 +2066,12 @@ var Guard = (function(){
     Token.clear();
     app.innerHTML = "";
     log("leave");
+    if(HELPER){
+      cover('<div>' + icon("bell", "hero") + '</div><h1>画面が 外れました</h1>'
+        + '<p>全画面が 外れました。ボタンを おすと もとに もどります。</p>'
+        + '<button class="btn big primary" data-g="resume">' + icon("expand") + 'もどす</button>');
+      return;
+    }
     cover('<div>' + icon("bell", "hero") + '</div><h1>先生を よんでね</h1>'
       + '<p>全画面が 外れました。先生が 暗証番号を 入れると、もとに もどります。</p>'
       + '<button class="btn big" data-g="unlock-away">' + icon("lock") + '先生</button>');
@@ -2074,7 +2153,7 @@ var Guard = (function(){
     if(!b) return;
     var g = b.getAttribute("data-g");
     if(g === "go") start();
-    else if(g === "nofs"){ askPin().then(function(tok){ if(tok){ Token.clear(); run(); } }); }
+    else if(g === "nofs"){ if(HELPER) run(); else askPin().then(function(tok){ if(tok){ Token.clear(); run(); } }); }
     else if(g === "teacher") askPin().then(function(tok){ if(tok) openTeacher(true); });
     else if(g === "unlock-away"){
       askPin().then(function(tok){

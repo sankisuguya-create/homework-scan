@@ -75,5 +75,11 @@ var P = (function(){
 })();
 
 var Gate = (typeof Gate !== "undefined") ? Gate : {
-  check: function(){ return {ok:true, email:"demo@edu.nishi.or.jp"}; }
+  check: function(){ return {ok:true, email:"demo@edu.nishi.or.jp"}; },
+  who: function(){ return {role:"staff", email:"demo@edu.nishi.or.jp", code:""}; },
+  checkAny: function(){ return {role:"staff", email:"demo@edu.nishi.or.jp", code:""}; },
+  norm: function(raw){
+    var e = String(raw == null ? "" : raw);
+    return e.trim().toLowerCase();
+  }
 };

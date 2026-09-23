@@ -7,6 +7,9 @@
    ■ 係の画面を終えるのも、先生の暗証番号のあとだけ。
    ■ 全画面が外れても、係の児童が他の画面を見ることはできても、
      表を触ったり先生の画面に入ったりはできない。
+   ■ BOOT.role === "helper"（係の児童のアドレスで開いた）ときは
+     先生につながる入口を出さない。全画面が外れても暗証番号なしで
+     もどせる（見えるのは係の表だけだから）。先生の口はサーバ側でも閉じてある。
 
    ※ Apps Script の画面は iframe の中に埋め込めない（外のページからの
      キー横取り＝Keyboard Lock も届かない）ので、Esc を横取りする
@@ -15,6 +18,7 @@
 var Guard = (function(){
   var state = "start";      /* start | running | away | teacher | finished */
   var finishing = false, app = null, idle = null;
+  var HELPER = (typeof BOOT !== "undefined" && BOOT && BOOT.role === "helper");
   var IDLE_MS = 5 * 60 * 1000;
 
   function log(kind, detail){ call("apiLog", kind, detail || "").catch(function(){}); }
@@ -49,10 +53,11 @@ var Guard = (function(){
       + '<p>係の画面は 全画面で ひらきます。</p>'
       + '<button class="btn big primary" data-g="go">' + icon("expand") + 'はじめる</button>'
       + '<div class="line" style="justify-content:center">'
-      +   '<button class="btn" data-g="teacher">' + icon("lock") + '先生の画面</button>'
+      +   (HELPER ? '' : '<button class="btn" data-g="teacher">' + icon("lock") + '先生の画面</button>')
       +   '<button class="btn" data-g="nofs">' + icon("hand") + '全画面に しないで ひらく</button>'
       + '</div>'
-      + '<p class="note" style="max-width:36em">全画面は Esc キーで外れます（外れると表が隠れ、先生の暗証番号が要ります）。</p>'
+      + '<p class="note" style="max-width:36em">全画面は Esc キーで外れます（外れると表が隠れ'
+      +   (HELPER ? 'ます）。' : '、先生の暗証番号が要ります）。') + '</p>'
       + '</div>';
   }
 
@@ -69,6 +74,12 @@ var Guard = (function(){
     Token.clear();
     app.innerHTML = "";
     log("leave");
+    if(HELPER){
+      cover('<div>' + icon("bell", "hero") + '</div><h1>画面が 外れました</h1>'
+        + '<p>全画面が 外れました。ボタンを おすと もとに もどります。</p>'
+        + '<button class="btn big primary" data-g="resume">' + icon("expand") + 'もどす</button>');
+      return;
+    }
     cover('<div>' + icon("bell", "hero") + '</div><h1>先生を よんでね</h1>'
       + '<p>全画面が 外れました。先生が 暗証番号を 入れると、もとに もどります。</p>'
       + '<button class="btn big" data-g="unlock-away">' + icon("lock") + '先生</button>');
@@ -150,7 +161,7 @@ var Guard = (function(){
     if(!b) return;
     var g = b.getAttribute("data-g");
     if(g === "go") start();
-    else if(g === "nofs"){ askPin().then(function(tok){ if(tok){ Token.clear(); run(); } }); }
+    else if(g === "nofs"){ if(HELPER) run(); else askPin().then(function(tok){ if(tok){ Token.clear(); run(); } }); }
     else if(g === "teacher") askPin().then(function(tok){ if(tok) openTeacher(true); });
     else if(g === "unlock-away"){
       askPin().then(function(tok){
