@@ -1,41 +1,23 @@
 /* ==================================================================
    全画面の見張り。係の画面は全画面の中でだけ見せる。
 
-   ■ 開き方は2通り
-     launcher … 教室 PC に置いた起動用ファイル（launcher.html）の中で動く。
-                全画面とキーの横取り（Esc 短押し・Alt+Tab など）は起動用ファイルが受け持つ。
-     direct   … GAS の URL を直接開いた。全画面にはできるが、Esc 1回で外れる。
-   ■ 全画面が外れたら表を隠し「先生を よんでね」にする。
+   ■ GAS の URL を直接開いて「はじめる」→ 全画面になる。
+     Esc キーで外れると表を隠し「先生を よんでね」にする。
      先生が暗証番号を入れるまで、表には戻らない。外れた時刻は操作記録に残す。
    ■ 係の画面を終えるのも、先生の暗証番号のあとだけ。
+   ■ 全画面が外れても、係の児童が他の画面を見ることはできても、
+     表を触ったり先生の画面に入ったりはできない。
 
-   ブラウザの決まりで、Esc の長押し（約2秒）だけは止められない。
-   そのときも上のとおり表を隠すので、係の児童が他の画面を見ることはできても、
-   表を触ったり先生の画面に入ったりはできない。
+   ※ Apps Script の画面は iframe の中に埋め込めない（外のページからの
+     キー横取り＝Keyboard Lock も届かない）ので、Esc を横取りする
+     起動用ファイルの方式は使わない。
 ================================================================== */
 var Guard = (function(){
-  var mode = "direct";
   var state = "start";      /* start | running | away | teacher | finished */
   var finishing = false, app = null, idle = null;
   var IDLE_MS = 5 * 60 * 1000;
 
   function log(kind, detail){ call("apiLog", kind, detail || "").catch(function(){}); }
-  function toTop(msg){ try{ window.top.postMessage(msg, "*"); }catch(e){} }
-
-  function detect(){
-    return new Promise(function(resolve){
-      if(window.top === window){ resolve(false); return; }
-      var done = false;
-      function on(e){
-        if(e.source === window.top && e.data && e.data.hs === "launcher"){
-          done = true; window.removeEventListener("message", on); resolve(e.data);
-        }
-      }
-      window.addEventListener("message", on);
-      toTop({hs:"hello"});
-      setTimeout(function(){ if(!done){ window.removeEventListener("message", on); resolve(false); } }, 900);
-    });
-  }
 
   function fsNow(){ return !!(document.fullscreenElement || document.webkitFullscreenElement); }
   function enterDirect(){
@@ -62,7 +44,6 @@ var Guard = (function(){
     state = "start";
     Helper.unmount(); Teacher.unmount();
     uncover();
-    var launched = mode === "launcher";
     app.innerHTML = '<div class="start">'
       + '<h1>' + icon("check") + 'しゅくだい チェック</h1>'
       + '<p>係の画面は 全画面で ひらきます。</p>'
@@ -71,8 +52,7 @@ var Guard = (function(){
       +   '<button class="btn" data-g="teacher">' + icon("lock") + '先生の画面</button>'
       +   '<button class="btn" data-g="nofs">' + icon("hand") + '全画面に しないで ひらく</button>'
       + '</div>'
-      + (launched ? '' : '<p class="note" style="max-width:36em">この開き方では、Esc キーで全画面が外れます（外れると表が隠れ、先生の暗証番号が要ります）。'
-                       + '教室の PC では、先生の画面の「せってい」から保存できる起動用ファイルで開くと、外れにくくなります。</p>')
+      + '<p class="note" style="max-width:36em">全画面は Esc キーで外れます（外れると表が隠れ、先生の暗証番号が要ります）。</p>'
       + '</div>';
   }
 
@@ -95,7 +75,6 @@ var Guard = (function(){
   }
 
   function start(){
-    if(mode === "launcher"){ toTop({hs:"enter"}); return; }
     enterDirect().then(function(){ log("start"); run(); }, function(){
       toast("全画面に できませんでした。このまま ひらきます", true);
       run();
@@ -103,7 +82,6 @@ var Guard = (function(){
   }
 
   function resume(){
-    if(mode === "launcher"){ toTop({hs:"enter"}); return; }
     enterDirect().then(function(){ log("resume"); run(); }, function(){
       toast("全画面に できませんでした", true);
     });
@@ -114,7 +92,6 @@ var Guard = (function(){
     Token.clear();
     log("finish");
     Helper.unmount(); Teacher.unmount();
-    if(mode === "launcher"){ toTop({hs:"exit"}); state = "finished"; app.innerHTML = ""; return; }
     exitDirect();
     showStart();
   }
@@ -132,7 +109,7 @@ var Guard = (function(){
   }
   function backToHelper(){
     Token.clear();
-    if(mode === "direct" && !fsNow()){ showStart(); return; }
+    if(!fsNow()){ showStart(); return; }
     run();
   }
   function armIdle(){
@@ -140,7 +117,7 @@ var Guard = (function(){
     if(state !== "teacher") return;
     idle = setTimeout(function(){
       if(state !== "teacher") return;
-      if(mode === "direct" && !fsNow() && !Teacher.isStandalone()) return showStart();
+      if(!fsNow() && !Teacher.isStandalone()) return showStart();
       Teacher.back();
     }, IDLE_MS);
   }
@@ -188,35 +165,13 @@ var Guard = (function(){
   });
 
   function onFsChange(){
-    if(mode !== "direct") return;
     if(!fsNow() && !finishing && (state === "running" || (state === "teacher" && !Teacher.isStandalone()))) away();
   }
   document.addEventListener("fullscreenchange", onFsChange);
   document.addEventListener("webkitfullscreenchange", onFsChange);
 
-  window.addEventListener("message", function(e){
-    if(mode !== "launcher" || e.source !== window.top || !e.data || e.data.hs !== "launcher") return;
-    var d = e.data;
-    if(d.ev === "start"){ log("start"); run(); }
-    else if(d.ev === "resume"){ log("resume"); run(); }
-    else if(d.ev === "leave" && !finishing) away();
-    else if(d.ev === "ended"){ state = "finished"; }
-    else if(d.ev === "fsfail") toast("全画面に できませんでした。もう一度 押してください", true);
-  });
-
-  function init(root){
-    app = root;
-    return detect().then(function(l){
-      if(l){
-        mode = "launcher";
-        if(l.fs) run(); else { state = "finished"; app.innerHTML = ""; }
-      }else{
-        mode = "direct";
-        showStart();
-      }
-    });
-  }
+  function init(root){ app = root; showStart(); }
 
   return {init:init, teacherMenu:teacherMenu, openTeacher:openTeacher,
-          mode:function(){ return mode; }, state:function(){ return state; }};
+          state:function(){ return state; }};
 })();

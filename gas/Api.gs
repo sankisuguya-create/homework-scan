@@ -16,7 +16,7 @@
 
 var TABLES = {
   "名簿":     ["番号", "氏名"],
-  "品目":     ["枠", "名前", "アイコン", "いつも出す"],
+  "品目":     ["枠", "名前", "アイコン", "いつも出す", "色"],
   "日の品目": ["日付", "枠", "名前"],
   "提出記録": ["記録ID", "日付", "番号", "枠", "操作", "時刻", "入力", "端末", "受信"],
   "欠席":     ["日付", "番号"],
@@ -25,13 +25,14 @@ var TABLES = {
   "設定":     ["項目", "値"]
 };
 var ICONS = ["book", "calc", "note", "pencil", "paper", "star", "music", "bag", "abc"];
+var ITEM_COLORS = ["blue", "red", "green"];   /* 品目の列の色。名前は係の画面の t-… に対応 */
 var DEFAULT_ROWS = {
   "品目": [
-    ["1", "漢字ドリル", "book",   "○"],
-    ["2", "計算ドリル", "calc",   "○"],
-    ["3", "連絡帳",     "note",   "○"],
-    ["4", "", "pencil", ""], ["5", "", "paper", ""], ["6", "", "star",  ""],
-    ["7", "", "music",  ""], ["8", "", "bag",   ""], ["9", "", "abc",   ""]
+    ["1", "漢字ドリル", "book",   "○", "red"],
+    ["2", "計算ドリル", "calc",   "○", "blue"],
+    ["3", "連絡帳",     "note",   "○", "green"],
+    ["4", "", "pencil", "", ""], ["5", "", "paper", "", ""], ["6", "", "star",  "", ""],
+    ["7", "", "music",  "", ""], ["8", "", "bag",   "", ""], ["9", "", "abc",   "", ""]
   ],
   "設定": [
     ["提出率の目安（%）", "80"],
@@ -75,11 +76,12 @@ function readSlots(){
     if(s == null || s < 1 || s > Domain.SLOTS) return;
     bySlot[s] = {slot:s, name:String(r[1] || "").trim(),
                  icon: ICONS.indexOf(String(r[2])) >= 0 ? String(r[2]) : ICONS[s - 1],
-                 daily: String(r[3] || "").trim() !== ""};
+                 daily: String(r[3] || "").trim() !== "",
+                 color: ITEM_COLORS.indexOf(String(r[4])) >= 0 ? String(r[4]) : ""};
   });
   var out = [];
   for(var s = 1; s <= Domain.SLOTS; s++)
-    out.push(bySlot[s] || {slot:s, name:"", icon:ICONS[s - 1], daily:false});
+    out.push(bySlot[s] || {slot:s, name:"", icon:ICONS[s - 1], daily:false, color:""});
   return out;
 }
 function readDays(){
@@ -138,9 +140,12 @@ function itemsFor(date, create){
       if(!readDays()[date]) P.append("日の品目", rows);
     });
   }
-  var icon = {};
-  slots.forEach(function(s){ icon[s.slot] = s.icon; });
-  return list ? list.map(function(it){ return {slot:it.slot, name:it.name, icon:icon[it.slot]}; }) : null;
+  var meta = {};
+  slots.forEach(function(s){ meta[s.slot] = s; });
+  return list ? list.map(function(it){
+    var m = meta[it.slot] || {};
+    return {slot:it.slot, name:it.name, icon:m.icon, color:m.color || ""};
+  }) : null;
 }
 
 /* ── 係の画面 ─────────────────────────────── */
@@ -334,7 +339,8 @@ function apiSaveSlots(token, slots){
     var s = by[n] || {};
     var icon = ICONS.indexOf(String(s.icon)) >= 0 ? String(s.icon) : ICONS[n - 1];
     var name = String(s.name || "").trim().slice(0, 20);
-    rows.push([n, name, icon, s.daily && name ? "○" : ""]);
+    rows.push([n, name, icon, s.daily && name ? "○" : "",
+               ITEM_COLORS.indexOf(String(s.color)) >= 0 ? String(s.color) : ""]);
   }
   P.lock(function(){ P.replace("品目", rows); });
   return apiSetup(token);

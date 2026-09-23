@@ -9,17 +9,25 @@ var P = (function(){
 
   function book(){ return SpreadsheetApp.getActive(); }
 
-  /* シートが無ければ見出し付きで作る。列は文字として持つ（日付の自動変換を止める） */
+  /* シートが無ければ見出し付きで作る。列は文字として持つ（日付の自動変換を止める）。
+     スキーマより狭い既存のシートは、列を足して見出しを書き直す（＝表の定義を変えたときの移行） */
   function sheet(name){
-    var ss = book(), sh = ss.getSheetByName(name);
-    if(sh) return sh;
     var head = TABLES[name];
     if(!head) throw new Error("知らない表: " + name);
-    sh = ss.insertSheet(name);
-    sh.getRange(1, 1, 1, head.length).setValues([head]).setFontWeight("bold");
-    sh.getRange(1, 1, sh.getMaxRows(), head.length).setNumberFormat("@");
-    sh.setFrozenRows(1);
-    if(DEFAULT_ROWS[name]) sh.getRange(2, 1, DEFAULT_ROWS[name].length, head.length).setValues(DEFAULT_ROWS[name]);
+    var ss = book(), sh = ss.getSheetByName(name);
+    if(!sh){
+      sh = ss.insertSheet(name);
+      sh.getRange(1, 1, 1, head.length).setValues([head]).setFontWeight("bold");
+      sh.getRange(1, 1, sh.getMaxRows(), head.length).setNumberFormat("@");
+      sh.setFrozenRows(1);
+      if(DEFAULT_ROWS[name]) sh.getRange(2, 1, DEFAULT_ROWS[name].length, head.length).setValues(DEFAULT_ROWS[name]);
+    }else{
+      var hasHead = sh.getRange(1, 1, 1, head.length).getValues()[0];
+      if(String(hasHead[head.length - 1]) === ""){
+        if(sh.getMaxColumns() < head.length) sh.insertColumnsAfter(sh.getMaxColumns(), head.length - sh.getMaxColumns());
+        sh.getRange(1, 1, 1, head.length).setValues([head]).setFontWeight("bold");
+      }
+    }
     return sh;
   }
 
@@ -96,11 +104,6 @@ function doGet(e){
   var j = Gate.judge(Gate.activeEmail());
   if(!j.ok) return Gate.denyPage(j);
   var q = (e && e.parameter) || {};
-  if(q.launcher){
-    return ContentService.createTextOutput(LAUNCHER_HTML.replace("__APP_URL__", P.url()))
-      .setMimeType(ContentService.MimeType.TEXT)
-      .downloadAsFile("宿題チェック起動用.html");
-  }
   var view = q.view === "teacher" ? "teacher" : "helper";
   var t = HtmlService.createTemplateFromFile("Index");
   t.boot = JSON.stringify({view:view, url:P.url()});

@@ -24,6 +24,9 @@
   --on-done:#fff;
   --warn:#FFC20E;      /* 注意（黒文字 13:1） */
   --sub:#333;          /* 補足の文字（白地 12.6:1） */
+  --tb:#CFE2F3;        /* 品目列の薄青（黒文字 12:1） */
+  --tr:#F4CCCC;        /* 品目列の薄赤（黒文字 12:1） */
+  --tg:#D9EAD3;        /* 品目列の薄緑（黒文字 12:1） */
   --line:3px solid var(--ink);
   --thin:2px solid var(--ink);
   --r:10px;
@@ -82,6 +85,20 @@ button{cursor:pointer;touch-action:manipulation}
 .pane .head{background:var(--ink);color:var(--paper)}
 .pane .head > div{display:flex;align-items:center;justify-content:center;gap:6px;font-weight:700;font-size:clamp(14px,1.4vw,20px);padding:4px;text-align:center;line-height:1.15}
 .pane .head .ic{width:1.5em;height:1.5em}
+/* 品目の列の色。アイコンと名前と一緒に出す（色だけで区別しない） */
+.head .t-blue{background:var(--tb);color:var(--ink)}
+.head .t-red{background:var(--tr);color:var(--ink)}
+.head .t-green{background:var(--tg);color:var(--ink)}
+.cell.t-blue,.row.empty .cell.t-blue{background:var(--tb)}
+.cell.t-red,.row.empty .cell.t-red{background:var(--tr)}
+.cell.t-green,.row.empty .cell.t-green{background:var(--tg)}
+.chip.t-blue{background:var(--tb)}
+.chip.t-red{background:var(--tr)}
+.chip.t-green{background:var(--tg)}
+.pick.t-blue{background:var(--tb)}
+.pick.t-red{background:var(--tr)}
+.pick.t-green{background:var(--tg)}
+.pick.t-blue[aria-pressed="true"],.pick.t-red[aria-pressed="true"],.pick.t-green[aria-pressed="true"]{background:var(--ink);color:var(--paper)}
 .pane .who{display:flex;align-items:center;gap:10px;padding:0 10px;min-width:0}
 .pane .no{font-size:clamp(14px,calc(var(--rh) * .62),34px);font-weight:800;min-width:1.6em;text-align:right;font-variant-numeric:tabular-nums}
 .pane .nm{font-size:clamp(12px,calc(var(--rh) * .5),26px);font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -93,6 +110,9 @@ button{cursor:pointer;touch-action:manipulation}
 .s-rest{background:var(--soft);color:var(--ink)}
 .s-forgot{background:var(--warn);color:var(--ink)}
 .s-doing{background:var(--paper);color:var(--ink);box-shadow:inset 0 0 0 4px var(--ink)}
+.cell.s-doing.t-blue{background:var(--tb)}
+.cell.s-doing.t-red{background:var(--tr)}
+.cell.s-doing.t-green{background:var(--tg)}
 .legend .s-doing{box-shadow:none;border-width:3px}
 .cell.flash{animation:flash .45s}
 @keyframes flash{0%{outline:6px solid var(--ink);outline-offset:-8px}100%{outline:0 solid var(--ink);outline-offset:-8px}}
@@ -505,7 +525,7 @@ var Domain = (function(){
 
 var TABLES = {
   "名簿":     ["番号", "氏名"],
-  "品目":     ["枠", "名前", "アイコン", "いつも出す"],
+  "品目":     ["枠", "名前", "アイコン", "いつも出す", "色"],
   "日の品目": ["日付", "枠", "名前"],
   "提出記録": ["記録ID", "日付", "番号", "枠", "操作", "時刻", "入力", "端末", "受信"],
   "欠席":     ["日付", "番号"],
@@ -514,13 +534,14 @@ var TABLES = {
   "設定":     ["項目", "値"]
 };
 var ICONS = ["book", "calc", "note", "pencil", "paper", "star", "music", "bag", "abc"];
+var ITEM_COLORS = ["blue", "red", "green"];   /* 品目の列の色。名前は係の画面の t-… に対応 */
 var DEFAULT_ROWS = {
   "品目": [
-    ["1", "漢字ドリル", "book",   "○"],
-    ["2", "計算ドリル", "calc",   "○"],
-    ["3", "連絡帳",     "note",   "○"],
-    ["4", "", "pencil", ""], ["5", "", "paper", ""], ["6", "", "star",  ""],
-    ["7", "", "music",  ""], ["8", "", "bag",   ""], ["9", "", "abc",   ""]
+    ["1", "漢字ドリル", "book",   "○", "red"],
+    ["2", "計算ドリル", "calc",   "○", "blue"],
+    ["3", "連絡帳",     "note",   "○", "green"],
+    ["4", "", "pencil", "", ""], ["5", "", "paper", "", ""], ["6", "", "star",  "", ""],
+    ["7", "", "music",  "", ""], ["8", "", "bag",   "", ""], ["9", "", "abc",   "", ""]
   ],
   "設定": [
     ["提出率の目安（%）", "80"],
@@ -564,11 +585,12 @@ function readSlots(){
     if(s == null || s < 1 || s > Domain.SLOTS) return;
     bySlot[s] = {slot:s, name:String(r[1] || "").trim(),
                  icon: ICONS.indexOf(String(r[2])) >= 0 ? String(r[2]) : ICONS[s - 1],
-                 daily: String(r[3] || "").trim() !== ""};
+                 daily: String(r[3] || "").trim() !== "",
+                 color: ITEM_COLORS.indexOf(String(r[4])) >= 0 ? String(r[4]) : ""};
   });
   var out = [];
   for(var s = 1; s <= Domain.SLOTS; s++)
-    out.push(bySlot[s] || {slot:s, name:"", icon:ICONS[s - 1], daily:false});
+    out.push(bySlot[s] || {slot:s, name:"", icon:ICONS[s - 1], daily:false, color:""});
   return out;
 }
 function readDays(){
@@ -627,9 +649,12 @@ function itemsFor(date, create){
       if(!readDays()[date]) P.append("日の品目", rows);
     });
   }
-  var icon = {};
-  slots.forEach(function(s){ icon[s.slot] = s.icon; });
-  return list ? list.map(function(it){ return {slot:it.slot, name:it.name, icon:icon[it.slot]}; }) : null;
+  var meta = {};
+  slots.forEach(function(s){ meta[s.slot] = s; });
+  return list ? list.map(function(it){
+    var m = meta[it.slot] || {};
+    return {slot:it.slot, name:it.name, icon:m.icon, color:m.color || ""};
+  }) : null;
 }
 
 /* ── 係の画面 ─────────────────────────────── */
@@ -823,7 +848,8 @@ function apiSaveSlots(token, slots){
     var s = by[n] || {};
     var icon = ICONS.indexOf(String(s.icon)) >= 0 ? String(s.icon) : ICONS[n - 1];
     var name = String(s.name || "").trim().slice(0, 20);
-    rows.push([n, name, icon, s.daily && name ? "○" : ""]);
+    rows.push([n, name, icon, s.daily && name ? "○" : "",
+               ITEM_COLORS.indexOf(String(s.color)) >= 0 ? String(s.color) : ""]);
   }
   P.lock(function(){ P.replace("品目", rows); });
   return apiSetup(token);
@@ -1052,7 +1078,6 @@ var google = {script: {run: (function(){
 })()}};
 </script>
 <script>
-var LAUNCHER_HTML = "<!DOCTYPE html>\n<html lang=\"ja\">\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<title>宿題チェック（起動用）<\/title>\n<!--\n  教室の PC に保存して、Chrome か Edge で開く起動用ファイル。\n  中に宿題チェックの画面（GAS）を入れ、このファイルが全画面とキーの横取りを受け持つ。\n  ・全画面の間は Esc の短押し・Alt+Tab・Windows キーなどをブラウザに渡さない（Keyboard Lock）\n  ・Esc の長押し（約2秒）だけはブラウザの決まりで止められない。外れたら、中の画面が表を隠して\n    「先生を よんでね」にし、先生の暗証番号が入るまで戻らない\n  ・「係の画面を おわる」は中の画面で先生の暗証番号を入れたあとだけ\n-->\n<style>\n*{box-sizing:border-box}\nhtml,body{margin:0;height:100%;background:#fff;color:#000;\n  font-family:\"BIZ UDPGothic\",\"BIZ UDゴシック\",\"Hiragino Sans\",\"Yu Gothic UI\",\"Meiryo\",system-ui,sans-serif}\n#app{position:fixed;inset:0;width:100%;height:100%;border:0;display:block}\n#start{position:fixed;inset:0;z-index:5;background:#fff;display:flex;flex-direction:column;align-items:center;\n  justify-content:center;gap:28px;text-align:center;padding:24px}\n#start.hide{display:none}\nh1{font-size:52px;margin:0}\np{font-size:24px;margin:0;max-width:36em}\nbutton{font:inherit;cursor:pointer;border:3px solid #000;border-radius:10px;background:#0033A0;color:#fff;\n  font-size:34px;font-weight:800;min-height:96px;padding:12px 48px}\nbutton:focus-visible,input:focus-visible{outline:5px solid #FFC20E;outline-offset:2px}\n.msg{font-size:26px;font-weight:800;background:#FFC20E;padding:6px 18px;border-radius:8px}\n.msg:empty{display:none}\n.url{display:flex;flex-direction:column;gap:10px;align-items:center;font-size:20px;font-weight:700}\n.url input{width:min(90vw,760px);font-size:18px;padding:10px;border:2px solid #000;border-radius:8px}\n.url button{font-size:22px;min-height:60px;padding:6px 24px;background:#fff;color:#000}\n.url.hide{display:none}\n<\/style>\n<\/head>\n<body>\n<div id=\"start\">\n  <h1>しゅくだい チェック<\/h1>\n  <div class=\"msg\" id=\"msg\"><\/div>\n  <button id=\"go\">はじめる<\/button>\n  <p>全画面に なります。おわるときは、画面の「先生」から 先生が 暗証番号を 入れます。<\/p>\n  <div class=\"url hide\" id=\"urlbox\">\n    <label for=\"url\">宿題チェックの URL（Apps Script の「ウェブアプリ」の URL）<\/label>\n    <input id=\"url\" type=\"url\" placeholder=\"https://script.google.com/a/macros/…/exec\">\n    <button id=\"seturl\">この URL を 使う<\/button>\n  <\/div>\n<\/div>\n<iframe id=\"app\" title=\"宿題チェック\" allow=\"autoplay\"><\/iframe>\n<script>\n(function(){\n  var URL_IN_FILE = \"__APP_URL__\";\n  var KEY = \"homework-scan/launcher-url\";\n  var frame = document.getElementById(\"app\"), start = document.getElementById(\"start\");\n  var msg = document.getElementById(\"msg\");\n  var started = false, exiting = false, inner = null;\n\n  function appUrl(){\n    if(/^https?:|^file:/.test(URL_IN_FILE)) return URL_IN_FILE;\n    try{ return localStorage.getItem(KEY) || \"\"; }catch(e){ return \"\"; }\n  }\n  function load(){\n    var u = appUrl();\n    if(!u){ document.getElementById(\"urlbox\").classList.remove(\"hide\"); return; }\n    frame.src = u;\n  }\n  document.getElementById(\"seturl\").onclick = function(){\n    var u = document.getElementById(\"url\").value.trim();\n    if(!/^https:\\/\\/script\\.google\\.com\\//.test(u)){ msg.textContent = \"Apps Script の URL を 入れてください\"; return; }\n    try{ localStorage.setItem(KEY, u); }catch(e){}\n    document.getElementById(\"urlbox\").classList.add(\"hide\");\n    msg.textContent = \"\";\n    load();\n  };\n\n  function fsNow(){ return !!(document.fullscreenElement || document.webkitFullscreenElement); }\n  function post(m){ m.hs = \"launcher\"; m.fs = fsNow(); try{ (inner || frame.contentWindow).postMessage(m, \"*\"); }catch(e){} }\n  /* GAS の画面は iframe の中の、さらに奥の枠で動く。送り主が #app の中の枠かどうかを親をたどって確かめる */\n  function fromApp(w){\n    for(var i = 0; w && i < 6; i++){\n      if(w === frame.contentWindow) return true;\n      if(w === window || w === w.parent) return false;\n      w = w.parent;\n    }\n    return false;\n  }\n\n  function enter(){\n    var el = document.documentElement;\n    var f = el.requestFullscreen || el.webkitRequestFullscreen;\n    if(!f) return Promise.reject(new Error(\"この ブラウザでは 全画面に できません\"));\n    return Promise.resolve(f.call(el, {navigationUI:\"hide\"})).then(function(){\n      if(navigator.keyboard && navigator.keyboard.lock) return navigator.keyboard.lock().catch(function(){});\n    });\n  }\n\n  document.getElementById(\"go\").onclick = function(){\n    if(!frame.src){ msg.textContent = \"先に URL を 入れてください\"; return; }\n    exiting = false;\n    enter().then(function(){\n      start.classList.add(\"hide\");\n      msg.textContent = \"\";\n      post({ev: started ? \"resume\" : \"start\"});\n      started = true;\n    }, function(err){ msg.textContent = \"全画面に できませんでした：\" + (err && err.message || err); });\n  };\n\n  function onFs(){\n    if(fsNow()) return;\n    if(exiting){\n      exiting = false; started = false;\n      start.classList.remove(\"hide\");\n      msg.textContent = \"おわりました\";\n      post({ev:\"ended\"});\n      return;\n    }\n    if(started) post({ev:\"leave\"});\n  }\n  document.addEventListener(\"fullscreenchange\", onFs);\n  document.addEventListener(\"webkitfullscreenchange\", onFs);\n\n  window.addEventListener(\"message\", function(e){\n    if(!e.data || !fromApp(e.source)) return;\n    var d = e.data;\n    if(/^(hello|enter|exit)$/.test(d.hs)) inner = e.source;\n    if(d.hs === \"hello\") post({ev:\"hello\"});\n    else if(d.hs === \"enter\"){\n      exiting = false;\n      enter().then(function(){\n        start.classList.add(\"hide\");\n        post({ev: started ? \"resume\" : \"start\"});\n        started = true;\n      }, function(){ post({ev:\"fsfail\"}); });\n    }\n    else if(d.hs === \"exit\"){\n      exiting = true;\n      if(fsNow()){\n        var f = document.exitFullscreen || document.webkitExitFullscreen;\n        try{ f.call(document); }catch(err){ onFs(); }\n      }else onFs();\n    }\n  });\n\n  document.addEventListener(\"contextmenu\", function(e){ e.preventDefault(); });\n  window.addEventListener(\"beforeunload\", function(e){ if(started){ e.preventDefault(); e.returnValue = \"\"; } });\n\n  load();\n})();\n<\/script>\n<\/body>\n<\/html>\n";
 /* アイコン。24×24 の線画を1ファイルに持つ（外部の配信には頼らない）。
    線は太く（2.4）、角は丸く。色は currentColor なので、置いた場所の文字色になる。 */
 var ICON_PATHS = {
@@ -1100,6 +1125,7 @@ var ICON_PATHS = {
 };
 var ICON_LABEL = {book:"本", calc:"計算", note:"連絡帳", pencil:"えんぴつ", paper:"プリント",
                   star:"星", music:"音楽", bag:"かばん", abc:"英語"};
+var COLOR_LABEL = {blue:"薄青", red:"薄赤", green:"薄緑"};
 function icon(name, cls){
   var p = ICON_PATHS[name] || ICON_PATHS.paper;
   return '<svg class="ic' + (cls ? " " + cls : "") + '" viewBox="0 0 24 24" aria-hidden="true" '
@@ -1375,9 +1401,11 @@ var Helper = (function(){
   function cellInner(state){
     return '<span class="g" aria-hidden="true">' + markGlyph(state) + '</span>';
   }
+  /* 品目の列の色。空白と △ のマスは列色のまま、○・休・忘 は状態の色を優先する */
+  function tintCls(it, s){ return it.color && (s === "" || s === "doing") ? " t-" + it.color : ""; }
   function cellHtml(no, it, state, excused){
     var s = excused ? "on" : (state || "");
-    return '<button class="cell s-' + (s || "none") + '" data-k="' + no + ':' + it.slot + '" '
+    return '<button class="cell s-' + (s || "none") + tintCls(it, s) + '" data-k="' + no + ':' + it.slot + '" '
          + 'aria-label="' + no + 'ばん ' + esc(it.name) + ' ' + MARK[s].label + '">' + cellInner(s) + '</button>';
   }
   function paintCell(k, state){
@@ -1385,7 +1413,7 @@ var Helper = (function(){
     if(!c) return render();
     var p = k.split(":"), it = itemOf(Number(p[1]));
     var s = state || "";
-    c.className = "cell s-" + (s || "none");
+    c.className = "cell s-" + (s || "none") + tintCls(it, s);
     c.setAttribute("aria-label", p[0] + "ばん " + it.name + " " + MARK[s].label);
     c.innerHTML = cellInner(s);
     flash(c);
@@ -1408,7 +1436,7 @@ var Helper = (function(){
       var f = (forgot ? '<span class="fg">忘 ' + forgot + '</span>' : '')
             + (doing ? '<span class="dg">' + MARK_SVG.doing + doing + '</span>' : '');
       return left
-        ? '<div class="chip">' + icon(it.icon) + esc(it.name) + '<span class="left">まだ ' + left + '人</span>' + f + '</div>'
+        ? '<div class="chip' + (it.color ? " t-" + it.color : "") + '">' + icon(it.icon) + esc(it.name) + '<span class="left">まだ ' + left + '人</span>' + f + '</div>'
         : '<div class="chip all">' + icon(it.icon) + esc(it.name) + icon("check") + 'ぜんいん チェック' + f + '</div>';
     }).join("");
   }
@@ -1417,13 +1445,13 @@ var Helper = (function(){
   function paneHtml(list, rows, cols, cells, named){
     var h = '<div class="pane" style="--cols:' + cols + ';--rows:' + (rows + 1) + ';grid-template-rows:auto repeat(' + rows + ',minmax(0,1fr))">';
     h += '<div class="row head"><div>' + (named ? 'ばん・なまえ' : 'ばん') + '</div>'
-       + S.items.map(function(it){ return '<div>' + icon(it.icon) + '<span>' + esc(it.name) + '</span></div>'; }).join("")
+       + S.items.map(function(it){ return '<div class="' + (it.color ? "t-" + it.color : "") + '">' + icon(it.icon) + '<span>' + esc(it.name) + '</span></div>'; }).join("")
        + '</div>';
     for(var i = 0; i < rows; i++){
       var st = list[i];
       if(!st){
         h += '<div class="row empty"><div class="who"></div>'
-           + S.items.map(function(){ return '<div class="cell"></div>'; }).join("") + '</div>';
+           + S.items.map(function(it){ return '<div class="cell' + (it.color ? " t-" + it.color : "") + '"></div>'; }).join("") + '</div>';
         continue;
       }
       h += '<div class="row"><div class="who"><span class="no">' + st.no + '</span>'
@@ -1491,7 +1519,7 @@ var Helper = (function(){
      分析       … 提出率・平均提出時刻・続けて出ていない日数
      免除       … 特別な事情のある子を、期間・品目ごとに外す
      名簿と品目 … 名簿の貼り付け、品目の枠（名前・アイコン・いつも出す）
-     せってい   … 分析の目安、係の画面の氏名、暗証番号、起動用ファイル、操作記録
+     せってい   … 分析の目安、係の画面の氏名、暗証番号、操作記録
 ================================================================== */
 var Teacher = (function(){
   var root = null, opts = {}, tab = "day", active = false;
@@ -1742,13 +1770,17 @@ var Teacher = (function(){
       + (roster ? '<span class="mk flag">' + icon("alert") + ' まだ 保存していません</span>' : '') + '</div></div>';
 
     h += '<div class="sec"><h2>' + icon("paper") + '品目の枠（9つ）</h2>'
-      + '<p class="note">「いつも出す」にした品目が、毎日の 最初の 品目に なります。その日だけ 変えるときは「きょうの表」で。</p>'
-      + '<div style="overflow-x:auto"><table class="tbl"><thead><tr><th class="num">枠</th><th>名前</th><th>アイコン</th><th>いつも出す</th></tr></thead><tbody>'
+      + '<p class="note">「いつも出す」にした品目が、毎日の 最初の 品目に なります。その日だけ 変えるときは「きょうの表」で。'
+      + '「列の色」を決めると、係の画面で その品目の列が その色に なります。</p>'
+      + '<div style="overflow-x:auto"><table class="tbl"><thead><tr><th class="num">枠</th><th>名前</th><th>アイコン</th><th>列の色</th><th>いつも出す</th></tr></thead><tbody>'
       + SU.slots.map(function(s){
           return '<tr data-sl="' + s.slot + '"><td class="num">' + s.slot + '</td>'
             + '<td><input type="text" maxlength="20" data-f="name" value="' + esc(s.name) + '" placeholder="（使わない）"></td>'
             + '<td><div class="chips">' + SU.icons.map(function(ic){
                 return '<button class="pick" data-icon="' + ic + '" aria-pressed="' + (s.icon === ic) + '" aria-label="' + esc(ICON_LABEL[ic] || ic) + '">' + icon(ic) + '</button>';
+              }).join("") + '</div></td>'
+            + '<td><div class="chips">' + ["", "blue", "red", "green"].map(function(c){
+                return '<button class="pick' + (c ? " t-" + c : "") + '" data-color="' + c + '" aria-pressed="' + ((s.color || "") === c) + '">' + (c ? esc(COLOR_LABEL[c]) : "なし") + '</button>';
               }).join("") + '</div></td>'
             + '<td><input type="checkbox" data-f="daily" style="width:32px;height:32px"' + (s.daily ? " checked" : "") + '></td></tr>';
         }).join("") + '</tbody></table></div>'
@@ -1776,13 +1808,6 @@ var Teacher = (function(){
       + '<label class="field">新しい番号（4〜8けた）<input type="password" inputmode="numeric" id="pin1" maxlength="8" autocomplete="new-password"></label>'
       + '<label class="field">もう一度<input type="password" inputmode="numeric" id="pin2" maxlength="8" autocomplete="new-password"></label>'
       + '<button class="btn" data-t="pin-save">' + icon("shield") + '変える</button></div></div>';
-    h += '<div class="sec"><h2>' + icon("expand") + '起動用ファイル（教室の PC 用）</h2>'
-      + '<p class="note">教室の PC に このファイルを 保存して、Chrome か Edge で 開きます。「はじめる」で 全画面になり、Esc の短押しや Alt+Tab で 外れにくくなります。'
-      + 'Esc を 長く押すと 外れますが、そのときは 表が 隠れて 先生の暗証番号が 要ります。</p>'
-      + '<div class="line">' + (SU.url
-          ? '<a class="btn primary" href="' + esc(SU.url) + '?launcher=1" target="_blank" rel="noopener">' + icon("download") + '起動用ファイルを 保存</a>'
-          : '<button class="btn primary" data-t="launcher-demo">' + icon("download") + '起動用ファイルを 保存（デモ）</button>')
-      + '</div></div>';
     h += '<div class="sec"><h2>' + icon("clock") + '操作記録（新しい順）</h2>'
       + (logs ? (logs.length ? '<div style="overflow-x:auto"><table class="tbl"><thead><tr><th>時刻</th><th>できごと</th><th>アカウント</th></tr></thead><tbody>'
           + logs.map(function(l){ return '<tr><td>' + esc(l.at) + '</td><td>' + esc(l.kind) + (l.detail ? " " + esc(l.detail) : "") + '</td><td>' + esc(l.who) + '</td></tr>'; }).join("")
@@ -1790,13 +1815,6 @@ var Teacher = (function(){
         : '<div class="line"><button class="btn" data-t="logs">' + icon("clock") + '見る</button></div>')
       + '</div>';
     return h;
-  }
-  function launcherDemo(){
-    var html = LAUNCHER_HTML.replace("__APP_URL__", location.href.split("#")[0]);
-    var a = document.createElement("a");
-    a.href = URL.createObjectURL(new Blob([html], {type:"text/html"}));
-    a.download = "宿題チェック起動用.html";
-    document.body.appendChild(a); a.click(); a.remove();
   }
 
   /* ────────── 操作 ────────── */
@@ -1813,7 +1831,12 @@ var Teacher = (function(){
     }
     var ic = e.target.closest("[data-icon]");
     if(ic){
-      $$("[data-icon]", ic.closest("tr")).forEach(function(b){ b.setAttribute("aria-pressed", b === ic); });
+      $$("[data-icon]", ic.closest("td")).forEach(function(b){ b.setAttribute("aria-pressed", b === ic); });
+      return;
+    }
+    var co = e.target.closest("[data-color]");
+    if(co){
+      $$("[data-color]", co.closest("td")).forEach(function(b){ b.setAttribute("aria-pressed", b === co); });
       return;
     }
     var nm = e.target.closest("[data-names]");
@@ -1860,8 +1883,10 @@ var Teacher = (function(){
     if(t === "sl-save"){
       var slots = $$("[data-sl]", root).map(function(tr){
         var p = $('[data-icon][aria-pressed="true"]', tr);
+        var pc = $('[data-color][aria-pressed="true"]', tr);
         return {slot:Number(tr.getAttribute("data-sl")), name:$('[data-f="name"]', tr).value.trim(),
-                icon: p ? p.getAttribute("data-icon") : "", daily:$('[data-f="daily"]', tr).checked};
+                icon: p ? p.getAttribute("data-icon") : "", daily:$('[data-f="daily"]', tr).checked,
+                color: pc ? pc.getAttribute("data-color") : ""};
       });
       return tcall("apiSaveSlots", slots).then(function(r){ SU = r; D = null; show(); toast("品目を保存しました"); });
     }
@@ -1878,7 +1903,6 @@ var Teacher = (function(){
       return tcall("apiSetPin", p1).then(function(r){ Token.set(r.token); $("#pin1").value = $("#pin2").value = ""; toast("暗証番号を変えました"); });
     }
     if(t === "logs") return tcall("apiLogs").then(function(r){ logs = r; show(); });
-    if(t === "launcher-demo") return launcherDemo();
   }
   function onChange(e){
     if(!active || !root.contains(e.target)) return;
@@ -1901,41 +1925,23 @@ var Teacher = (function(){
 /* ==================================================================
    全画面の見張り。係の画面は全画面の中でだけ見せる。
 
-   ■ 開き方は2通り
-     launcher … 教室 PC に置いた起動用ファイル（launcher.html）の中で動く。
-                全画面とキーの横取り（Esc 短押し・Alt+Tab など）は起動用ファイルが受け持つ。
-     direct   … GAS の URL を直接開いた。全画面にはできるが、Esc 1回で外れる。
-   ■ 全画面が外れたら表を隠し「先生を よんでね」にする。
+   ■ GAS の URL を直接開いて「はじめる」→ 全画面になる。
+     Esc キーで外れると表を隠し「先生を よんでね」にする。
      先生が暗証番号を入れるまで、表には戻らない。外れた時刻は操作記録に残す。
    ■ 係の画面を終えるのも、先生の暗証番号のあとだけ。
+   ■ 全画面が外れても、係の児童が他の画面を見ることはできても、
+     表を触ったり先生の画面に入ったりはできない。
 
-   ブラウザの決まりで、Esc の長押し（約2秒）だけは止められない。
-   そのときも上のとおり表を隠すので、係の児童が他の画面を見ることはできても、
-   表を触ったり先生の画面に入ったりはできない。
+   ※ Apps Script の画面は iframe の中に埋め込めない（外のページからの
+     キー横取り＝Keyboard Lock も届かない）ので、Esc を横取りする
+     起動用ファイルの方式は使わない。
 ================================================================== */
 var Guard = (function(){
-  var mode = "direct";
   var state = "start";      /* start | running | away | teacher | finished */
   var finishing = false, app = null, idle = null;
   var IDLE_MS = 5 * 60 * 1000;
 
   function log(kind, detail){ call("apiLog", kind, detail || "").catch(function(){}); }
-  function toTop(msg){ try{ window.top.postMessage(msg, "*"); }catch(e){} }
-
-  function detect(){
-    return new Promise(function(resolve){
-      if(window.top === window){ resolve(false); return; }
-      var done = false;
-      function on(e){
-        if(e.source === window.top && e.data && e.data.hs === "launcher"){
-          done = true; window.removeEventListener("message", on); resolve(e.data);
-        }
-      }
-      window.addEventListener("message", on);
-      toTop({hs:"hello"});
-      setTimeout(function(){ if(!done){ window.removeEventListener("message", on); resolve(false); } }, 900);
-    });
-  }
 
   function fsNow(){ return !!(document.fullscreenElement || document.webkitFullscreenElement); }
   function enterDirect(){
@@ -1962,7 +1968,6 @@ var Guard = (function(){
     state = "start";
     Helper.unmount(); Teacher.unmount();
     uncover();
-    var launched = mode === "launcher";
     app.innerHTML = '<div class="start">'
       + '<h1>' + icon("check") + 'しゅくだい チェック</h1>'
       + '<p>係の画面は 全画面で ひらきます。</p>'
@@ -1971,8 +1976,7 @@ var Guard = (function(){
       +   '<button class="btn" data-g="teacher">' + icon("lock") + '先生の画面</button>'
       +   '<button class="btn" data-g="nofs">' + icon("hand") + '全画面に しないで ひらく</button>'
       + '</div>'
-      + (launched ? '' : '<p class="note" style="max-width:36em">この開き方では、Esc キーで全画面が外れます（外れると表が隠れ、先生の暗証番号が要ります）。'
-                       + '教室の PC では、先生の画面の「せってい」から保存できる起動用ファイルで開くと、外れにくくなります。</p>')
+      + '<p class="note" style="max-width:36em">全画面は Esc キーで外れます（外れると表が隠れ、先生の暗証番号が要ります）。</p>'
       + '</div>';
   }
 
@@ -1995,7 +1999,6 @@ var Guard = (function(){
   }
 
   function start(){
-    if(mode === "launcher"){ toTop({hs:"enter"}); return; }
     enterDirect().then(function(){ log("start"); run(); }, function(){
       toast("全画面に できませんでした。このまま ひらきます", true);
       run();
@@ -2003,7 +2006,6 @@ var Guard = (function(){
   }
 
   function resume(){
-    if(mode === "launcher"){ toTop({hs:"enter"}); return; }
     enterDirect().then(function(){ log("resume"); run(); }, function(){
       toast("全画面に できませんでした", true);
     });
@@ -2014,7 +2016,6 @@ var Guard = (function(){
     Token.clear();
     log("finish");
     Helper.unmount(); Teacher.unmount();
-    if(mode === "launcher"){ toTop({hs:"exit"}); state = "finished"; app.innerHTML = ""; return; }
     exitDirect();
     showStart();
   }
@@ -2032,7 +2033,7 @@ var Guard = (function(){
   }
   function backToHelper(){
     Token.clear();
-    if(mode === "direct" && !fsNow()){ showStart(); return; }
+    if(!fsNow()){ showStart(); return; }
     run();
   }
   function armIdle(){
@@ -2040,7 +2041,7 @@ var Guard = (function(){
     if(state !== "teacher") return;
     idle = setTimeout(function(){
       if(state !== "teacher") return;
-      if(mode === "direct" && !fsNow() && !Teacher.isStandalone()) return showStart();
+      if(!fsNow() && !Teacher.isStandalone()) return showStart();
       Teacher.back();
     }, IDLE_MS);
   }
@@ -2088,37 +2089,15 @@ var Guard = (function(){
   });
 
   function onFsChange(){
-    if(mode !== "direct") return;
     if(!fsNow() && !finishing && (state === "running" || (state === "teacher" && !Teacher.isStandalone()))) away();
   }
   document.addEventListener("fullscreenchange", onFsChange);
   document.addEventListener("webkitfullscreenchange", onFsChange);
 
-  window.addEventListener("message", function(e){
-    if(mode !== "launcher" || e.source !== window.top || !e.data || e.data.hs !== "launcher") return;
-    var d = e.data;
-    if(d.ev === "start"){ log("start"); run(); }
-    else if(d.ev === "resume"){ log("resume"); run(); }
-    else if(d.ev === "leave" && !finishing) away();
-    else if(d.ev === "ended"){ state = "finished"; }
-    else if(d.ev === "fsfail") toast("全画面に できませんでした。もう一度 押してください", true);
-  });
-
-  function init(root){
-    app = root;
-    return detect().then(function(l){
-      if(l){
-        mode = "launcher";
-        if(l.fs) run(); else { state = "finished"; app.innerHTML = ""; }
-      }else{
-        mode = "direct";
-        showStart();
-      }
-    });
-  }
+  function init(root){ app = root; showStart(); }
 
   return {init:init, teacherMenu:teacherMenu, openTeacher:openTeacher,
-          mode:function(){ return mode; }, state:function(){ return state; }};
+          state:function(){ return state; }};
 })();
 /* 入口。?view=teacher なら先生の画面（暗証番号から）、ほかは係の画面の入口 */
 (function(){

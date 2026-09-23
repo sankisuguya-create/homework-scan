@@ -4,7 +4,7 @@
      分析       … 提出率・平均提出時刻・続けて出ていない日数
      免除       … 特別な事情のある子を、期間・品目ごとに外す
      名簿と品目 … 名簿の貼り付け、品目の枠（名前・アイコン・いつも出す）
-     せってい   … 分析の目安、係の画面の氏名、暗証番号、起動用ファイル、操作記録
+     せってい   … 分析の目安、係の画面の氏名、暗証番号、操作記録
 ================================================================== */
 var Teacher = (function(){
   var root = null, opts = {}, tab = "day", active = false;
@@ -255,13 +255,17 @@ var Teacher = (function(){
       + (roster ? '<span class="mk flag">' + icon("alert") + ' まだ 保存していません</span>' : '') + '</div></div>';
 
     h += '<div class="sec"><h2>' + icon("paper") + '品目の枠（9つ）</h2>'
-      + '<p class="note">「いつも出す」にした品目が、毎日の 最初の 品目に なります。その日だけ 変えるときは「きょうの表」で。</p>'
-      + '<div style="overflow-x:auto"><table class="tbl"><thead><tr><th class="num">枠</th><th>名前</th><th>アイコン</th><th>いつも出す</th></tr></thead><tbody>'
+      + '<p class="note">「いつも出す」にした品目が、毎日の 最初の 品目に なります。その日だけ 変えるときは「きょうの表」で。'
+      + '「列の色」を決めると、係の画面で その品目の列が その色に なります。</p>'
+      + '<div style="overflow-x:auto"><table class="tbl"><thead><tr><th class="num">枠</th><th>名前</th><th>アイコン</th><th>列の色</th><th>いつも出す</th></tr></thead><tbody>'
       + SU.slots.map(function(s){
           return '<tr data-sl="' + s.slot + '"><td class="num">' + s.slot + '</td>'
             + '<td><input type="text" maxlength="20" data-f="name" value="' + esc(s.name) + '" placeholder="（使わない）"></td>'
             + '<td><div class="chips">' + SU.icons.map(function(ic){
                 return '<button class="pick" data-icon="' + ic + '" aria-pressed="' + (s.icon === ic) + '" aria-label="' + esc(ICON_LABEL[ic] || ic) + '">' + icon(ic) + '</button>';
+              }).join("") + '</div></td>'
+            + '<td><div class="chips">' + ["", "blue", "red", "green"].map(function(c){
+                return '<button class="pick' + (c ? " t-" + c : "") + '" data-color="' + c + '" aria-pressed="' + ((s.color || "") === c) + '">' + (c ? esc(COLOR_LABEL[c]) : "なし") + '</button>';
               }).join("") + '</div></td>'
             + '<td><input type="checkbox" data-f="daily" style="width:32px;height:32px"' + (s.daily ? " checked" : "") + '></td></tr>';
         }).join("") + '</tbody></table></div>'
@@ -289,13 +293,6 @@ var Teacher = (function(){
       + '<label class="field">新しい番号（4〜8けた）<input type="password" inputmode="numeric" id="pin1" maxlength="8" autocomplete="new-password"></label>'
       + '<label class="field">もう一度<input type="password" inputmode="numeric" id="pin2" maxlength="8" autocomplete="new-password"></label>'
       + '<button class="btn" data-t="pin-save">' + icon("shield") + '変える</button></div></div>';
-    h += '<div class="sec"><h2>' + icon("expand") + '起動用ファイル（教室の PC 用）</h2>'
-      + '<p class="note">教室の PC に このファイルを 保存して、Chrome か Edge で 開きます。「はじめる」で 全画面になり、Esc の短押しや Alt+Tab で 外れにくくなります。'
-      + 'Esc を 長く押すと 外れますが、そのときは 表が 隠れて 先生の暗証番号が 要ります。</p>'
-      + '<div class="line">' + (SU.url
-          ? '<a class="btn primary" href="' + esc(SU.url) + '?launcher=1" target="_blank" rel="noopener">' + icon("download") + '起動用ファイルを 保存</a>'
-          : '<button class="btn primary" data-t="launcher-demo">' + icon("download") + '起動用ファイルを 保存（デモ）</button>')
-      + '</div></div>';
     h += '<div class="sec"><h2>' + icon("clock") + '操作記録（新しい順）</h2>'
       + (logs ? (logs.length ? '<div style="overflow-x:auto"><table class="tbl"><thead><tr><th>時刻</th><th>できごと</th><th>アカウント</th></tr></thead><tbody>'
           + logs.map(function(l){ return '<tr><td>' + esc(l.at) + '</td><td>' + esc(l.kind) + (l.detail ? " " + esc(l.detail) : "") + '</td><td>' + esc(l.who) + '</td></tr>'; }).join("")
@@ -303,13 +300,6 @@ var Teacher = (function(){
         : '<div class="line"><button class="btn" data-t="logs">' + icon("clock") + '見る</button></div>')
       + '</div>';
     return h;
-  }
-  function launcherDemo(){
-    var html = LAUNCHER_HTML.replace("__APP_URL__", location.href.split("#")[0]);
-    var a = document.createElement("a");
-    a.href = URL.createObjectURL(new Blob([html], {type:"text/html"}));
-    a.download = "宿題チェック起動用.html";
-    document.body.appendChild(a); a.click(); a.remove();
   }
 
   /* ────────── 操作 ────────── */
@@ -326,7 +316,12 @@ var Teacher = (function(){
     }
     var ic = e.target.closest("[data-icon]");
     if(ic){
-      $$("[data-icon]", ic.closest("tr")).forEach(function(b){ b.setAttribute("aria-pressed", b === ic); });
+      $$("[data-icon]", ic.closest("td")).forEach(function(b){ b.setAttribute("aria-pressed", b === ic); });
+      return;
+    }
+    var co = e.target.closest("[data-color]");
+    if(co){
+      $$("[data-color]", co.closest("td")).forEach(function(b){ b.setAttribute("aria-pressed", b === co); });
       return;
     }
     var nm = e.target.closest("[data-names]");
@@ -373,8 +368,10 @@ var Teacher = (function(){
     if(t === "sl-save"){
       var slots = $$("[data-sl]", root).map(function(tr){
         var p = $('[data-icon][aria-pressed="true"]', tr);
+        var pc = $('[data-color][aria-pressed="true"]', tr);
         return {slot:Number(tr.getAttribute("data-sl")), name:$('[data-f="name"]', tr).value.trim(),
-                icon: p ? p.getAttribute("data-icon") : "", daily:$('[data-f="daily"]', tr).checked};
+                icon: p ? p.getAttribute("data-icon") : "", daily:$('[data-f="daily"]', tr).checked,
+                color: pc ? pc.getAttribute("data-color") : ""};
       });
       return tcall("apiSaveSlots", slots).then(function(r){ SU = r; D = null; show(); toast("品目を保存しました"); });
     }
@@ -391,7 +388,6 @@ var Teacher = (function(){
       return tcall("apiSetPin", p1).then(function(r){ Token.set(r.token); $("#pin1").value = $("#pin2").value = ""; toast("暗証番号を変えました"); });
     }
     if(t === "logs") return tcall("apiLogs").then(function(r){ logs = r; show(); });
-    if(t === "launcher-demo") return launcherDemo();
   }
   function onChange(e){
     if(!active || !root.contains(e.target)) return;
