@@ -45,6 +45,7 @@ var ICON_PATHS = {
 };
 var ICON_LABEL = {book:"本", calc:"計算", note:"連絡帳", pencil:"えんぴつ", paper:"プリント",
                   star:"星", music:"音楽", bag:"かばん", abc:"英語"};
+var COLOR_LABEL = {blue:"薄青", red:"薄赤", green:"薄緑"};
 function icon(name, cls){
   var p = ICON_PATHS[name] || ICON_PATHS.paper;
   return '<svg class="ic' + (cls ? " " + cls : "") + '" viewBox="0 0 24 24" aria-hidden="true" '

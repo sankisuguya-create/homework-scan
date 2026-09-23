@@ -109,9 +109,11 @@ var Helper = (function(){
   function cellInner(state){
     return '<span class="g" aria-hidden="true">' + markGlyph(state) + '</span>';
   }
+  /* 品目の列の色。空白と △ のマスは列色のまま、○・休・忘 は状態の色を優先する */
+  function tintCls(it, s){ return it.color && (s === "" || s === "doing") ? " t-" + it.color : ""; }
   function cellHtml(no, it, state, excused){
     var s = excused ? "on" : (state || "");
-    return '<button class="cell s-' + (s || "none") + '" data-k="' + no + ':' + it.slot + '" '
+    return '<button class="cell s-' + (s || "none") + tintCls(it, s) + '" data-k="' + no + ':' + it.slot + '" '
          + 'aria-label="' + no + 'ばん ' + esc(it.name) + ' ' + MARK[s].label + '">' + cellInner(s) + '</button>';
   }
   function paintCell(k, state){
@@ -119,7 +121,7 @@ var Helper = (function(){
     if(!c) return render();
     var p = k.split(":"), it = itemOf(Number(p[1]));
     var s = state || "";
-    c.className = "cell s-" + (s || "none");
+    c.className = "cell s-" + (s || "none") + tintCls(it, s);
     c.setAttribute("aria-label", p[0] + "ばん " + it.name + " " + MARK[s].label);
     c.innerHTML = cellInner(s);
     flash(c);
@@ -142,7 +144,7 @@ var Helper = (function(){
       var f = (forgot ? '<span class="fg">忘 ' + forgot + '</span>' : '')
             + (doing ? '<span class="dg">' + MARK_SVG.doing + doing + '</span>' : '');
       return left
-        ? '<div class="chip">' + icon(it.icon) + esc(it.name) + '<span class="left">まだ ' + left + '人</span>' + f + '</div>'
+        ? '<div class="chip' + (it.color ? " t-" + it.color : "") + '">' + icon(it.icon) + esc(it.name) + '<span class="left">まだ ' + left + '人</span>' + f + '</div>'
         : '<div class="chip all">' + icon(it.icon) + esc(it.name) + icon("check") + 'ぜんいん チェック' + f + '</div>';
     }).join("");
   }
@@ -151,13 +153,13 @@ var Helper = (function(){
   function paneHtml(list, rows, cols, cells, named){
     var h = '<div class="pane" style="--cols:' + cols + ';--rows:' + (rows + 1) + ';grid-template-rows:auto repeat(' + rows + ',minmax(0,1fr))">';
     h += '<div class="row head"><div>' + (named ? 'ばん・なまえ' : 'ばん') + '</div>'
-       + S.items.map(function(it){ return '<div>' + icon(it.icon) + '<span>' + esc(it.name) + '</span></div>'; }).join("")
+       + S.items.map(function(it){ return '<div class="' + (it.color ? "t-" + it.color : "") + '">' + icon(it.icon) + '<span>' + esc(it.name) + '</span></div>'; }).join("")
        + '</div>';
     for(var i = 0; i < rows; i++){
       var st = list[i];
       if(!st){
         h += '<div class="row empty"><div class="who"></div>'
-           + S.items.map(function(){ return '<div class="cell"></div>'; }).join("") + '</div>';
+           + S.items.map(function(it){ return '<div class="cell' + (it.color ? " t-" + it.color : "") + '"></div>'; }).join("") + '</div>';
         continue;
       }
       h += '<div class="row"><div class="who"><span class="no">' + st.no + '</span>'
