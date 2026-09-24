@@ -265,7 +265,7 @@ var Teacher = (function(){
             + '<td><button class="btn small" data-t="ro-del" data-i="' + i + '">' + icon("trash") + 'けす</button></td></tr>';
         }).join("") : '<tr><td colspan="3">まだ ありません</td></tr>')
       + '</tbody></table></div>'
-      + '<div class="sec" style="flex:1;min-width:300px"><label class="field">' + icon("paste") + ' スプレッドシートから 貼りつける（番号と氏名の2列）'
+      + '<div class="sec" style="flex:1;min-width:300px"><label class="field">' + icon("paste") + ' 元の名簿から 範囲コピーして 貼りつける（行の数字が番号、はじめの文字の列が氏名。余分な列は 読み飛ばします）'
       + '<textarea id="ro-paste" placeholder="1&#9;あおき はると&#10;2&#9;いしかわ めい"></textarea></label>'
       + '<div class="line"><button class="btn" data-t="ro-read">' + icon("paste") + '貼りつけた名簿を 読む</button></div></div></div>'
       + '<div class="line"><button class="btn" data-t="ro-add">' + icon("plus") + '1人 たす</button>'

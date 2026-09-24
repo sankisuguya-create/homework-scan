@@ -1,5 +1,5 @@
 /* デモ版の初期データ。名前は架空。
-   過去2週間ぶんの提出記録を作って、分析の画面に中身が出るようにする。 */
+   過去2週間ぶんの「記録」行を作って、分析の画面に中身が出るようにする。 */
 function demoSeed(){
   if(!P._empty()) return;
   var names = ["あおき はると", "いしかわ めい", "うえだ そうた", "えんどう ゆい", "おおの れん",
@@ -14,7 +14,7 @@ function demoSeed(){
   var seed = 7;
   function rnd(){ seed = (seed * 1103515245 + 12345) % 2147483648; return seed / 2147483648; }
   var today = Domain.jstDate(P.now());
-  var days = [], ev = [], abs = [];
+  var days = [], recs = [], abs = [];
   var d = today, n = 0;
   while(days.length < 10 && n < 30){
     d = Domain.addDays(d, -1); n++;
@@ -30,24 +30,26 @@ function demoSeed(){
       var no = i + 1;
       if(no === 12 && di === 6){ abs.push([date, no]); return; }
       var weak = no === 7 || no === 23;
+      var row = [date, String(no), "", "", "", "", "", "", "", "", ""], wrote = false;
       items.forEach(function(it){
         if(no === 15 && it[0] === 2) return;
         var p = weak ? 0.55 : 0.96;
         if(no === 29 && di >= 6) p = 0;
         var base = weak ? 8 * 60 + 25 : 8 * 60 + 5;
         var m = Math.round(base + rnd() * 20 - 5);
-        var stamp = date + " 0" + Math.floor(m / 60) + ":" + Domain.pad(m % 60) + ":00";
-        var op = "提出";
+        var hm = "0" + Math.floor(m / 60) + ":" + Domain.pad(m % 60);
+        var cell = "○ " + hm;
         if(rnd() > p){
           var r = rnd();
-          if(r < 0.2) return;
-          op = r < 0.75 ? "忘れた" : "やっている";
+          if(r < 0.2) return;                     /* 空白（押されなかった） */
+          cell = (r < 0.75 ? "忘 " : "△ ") + hm;
         }
-        ev.push(["seed-" + date + "-" + no + "-" + it[0], date, no, it[0], op, stamp, "タップ", "demo", stamp]);
+        row[1 + it[0]] = cell; wrote = true;
       });
+      if(wrote) recs.push(row);
     });
   });
-  P.append("提出記録", ev);
+  P.append("記録", recs);
   P.append("欠席", abs);
   P.append("免除", [[days[0], "", 15, 2, "計算ドリルは別の課題"]]);
   P.replace("設定", DEFAULT_ROWS["設定"].map(function(r){ return r.slice(); }).map(function(r){

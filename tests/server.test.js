@@ -15,6 +15,9 @@ console.log("■ 日付と時刻（日本時間）");
   ok("分を時刻に", D.hhmm(8 * 60 + 5) === "8:05");
   ok("シートの Date を日付に", D.asDate(new Date(JST("2026-09-25", "00:10"))) === "2026-09-25");
   ok("スラッシュ区切りの日付", D.asDate("2026/9/5") === "2026-09-05");
+  ok("開室の境目 8:00", D.openAt(JST("2026-09-25", "08:00")) === true && D.openAt(JST("2026-09-25", "07:59")) === false);
+  ok("閉室の境目 14:00", D.openAt(JST("2026-09-25", "13:59")) === true && D.openAt(JST("2026-09-25", "14:00")) === false);
+  ok("猶予ありなら14:10まで", D.openAt(JST("2026-09-25", "14:09"), 10) === true && D.openAt(JST("2026-09-25", "14:10"), 10) === false);
 }
 
 console.log("■ 名簿の貼り付け");
@@ -46,23 +49,20 @@ console.log("■ 係の画面");
 
   const r = s.apiMark([{id:"ev-000001", date:st.date, no:2, slot:1, op:"on", at:JST(st.date, "08:12"), via:"tap"}]);
   ok("○が付く", r.state.cells["2:1"] === "on", r.state.cells);
-  ok("記録は1行", s.P.rows("提出記録").length === 1);
+  ok("記録は1日×児童ごとの1行", s.P.rows("記録").length === 1 && s.P.rows("記録")[0].slice(0, 2).join() === "2026-09-25,2", s.P.rows("記録"));
   ok("最初の印で、その日が数える日になる", s.P.rows("日の品目").length === 3);
   s.apiMark([{id:"ev-000009", date:st.date, no:3, slot:3, op:"on", at:JST(st.date, "08:12")}]);
   ok("2回目の印では品目は増えない", s.P.rows("日の品目").length === 3);
-  s.P.replace("提出記録", s.P.rows("提出記録").slice(0, 1));
-  const row = s.P.rows("提出記録")[0];
-  ok("記録の形", row[4] === "提出" && row[5] === "2026-09-25 08:12:00" && row[6] === "タップ", row);
+  ok("セルの形（○と時刻）", s.P.rows("記録")[0][2] === "○ 8:12" && s.P.rows("記録")[1][4] === "○ 8:12", s.P.rows("記録"));
   s.apiMark([{id:"ev-000001", date:st.date, no:2, slot:1, op:"on", at:JST(st.date, "08:12")}]);
-  ok("同じ記録IDは2度書かない（送り直し）", s.P.rows("提出記録").length === 1);
+  ok("同じ記録を送り直しても増えない", s.P.rows("記録").length === 2 && s.P.rows("記録")[0][2] === "○ 8:12");
   const r2 = s.apiMark([{id:"ev-000002", date:st.date, no:2, slot:1, op:"off", at:JST(st.date, "08:13")}]);
   ok("空白に戻すと外れる", !r2.state.cells["2:1"]);
-  ok("空白も記録に残る", s.P.rows("提出記録").length === 2 && s.P.rows("提出記録")[1][4] === "空白");
+  ok("空白に戻した印は「消」で残る", s.P.rows("記録")[0][2] === "消 8:13", s.P.rows("記録")[0]);
   const cyc = ["rest", "forgot", "doing"].map((op, i) =>
     s.apiMark([{id:"ev-cyc-0" + i, date:st.date, no:2, slot:2, op, at:JST(st.date, "08:1" + i)}]).state.cells["2:2"]);
   ok("休・忘・△ をそのまま記録する", cyc.join() === "rest,forgot,doing", cyc);
-  ok("記録の文字", s.P.rows("提出記録").slice(2).map(r => r[4]).join() === "休み,忘れた,やっている");
-  s.P.replace("提出記録", s.P.rows("提出記録").slice(0, 2));
+  ok("セルの文字は休・忘・△", s.P.rows("記録")[0][3] === "△ 8:12", s.P.rows("記録")[0]);
 
   const bad = s.apiMark([
     {id:"ev-000003", date:st.date, no:5, slot:1, op:"on"},
@@ -70,23 +70,20 @@ console.log("■ 係の画面");
     {id:"ev-000005", date:"2026-09-24", no:1, slot:1, op:"on"},
     {id:"x", date:st.date, no:1, slot:1, op:"on"},
     {id:"ev-000006", date:st.date, no:1, slot:1, op:"zap"}]);
-  ok("名簿に無い番号・きょう無い品目・きのう・変なID・変な操作は書かない", s.P.rows("提出記録").length === 2, s.P.rows("提出記録"));
+  ok("名簿に無い番号・きょう無い品目・きのう・変なID・変な操作は書かない", s.P.rows("記録").length === 2, s.P.rows("記録"));
   ok("書かなかった分も「処理した」として返す（端末で消せる）", bad.processed.length === 4, bad.processed);
 
-  s.P.replace("提出記録", []);
+  s.P.replace("記録", []);
   /* 端末の時計が10分進んでいても、送った時の差で直す */
   s.apiMark([{id:"ev-skew-01", date:st.date, no:1, slot:2, op:"forgot", at:T0 + 10 * 60000 - 60000}], T0 + 10 * 60000);
-  ok("端末の時計のずれを直して記録する", s.P.rows("提出記録")[0][5] === "2026-09-25 08:29:00", s.P.rows("提出記録")[0]);
+  ok("端末の時計のずれを直して記録する", s.P.rows("記録")[0][3] === "忘 8:29", s.P.rows("記録")[0]);
   s.apiMark([{id:"ev-skew-02", date:st.date, no:1, slot:2, op:"on", at:T0 - 30000}], T0);
   ok("あとで押した方が、いまの状態になる", s.apiToday().cells["1:2"] === "on", s.apiToday().cells);
-  s.P.replace("提出記録", s.P.rows("提出記録").length ? [] : []);
-  s.P.append("提出記録", [["ev-000001", st.date, 2, 1, "提出", "2026-09-25 08:12:00", "タップ", "", ""],
-                         ["ev-000002", st.date, 2, 1, "空白", "2026-09-25 08:13:00", "タップ", "", ""]]);
 
   s.apiMark([{id:"ev-000007", date:st.date, no:1, slot:1, op:"on", at:JST(st.date, "08:20"), via:"teacher"}]);
-  ok("教職員は先生の印を付けられる", s.P.rows("提出記録")[2][6] === "先生");
+  ok("教職員は先生の印を付けられる", s.P.rows("記録")[0][2] === "*○ 8:20", s.P.rows("記録")[0]);
   s.apiMark([{id:"ev-000008", date:st.date, no:3, slot:1, op:"on", at:T0 + 3600e3}]);
-  ok("未来の時刻は受け取った時刻にする", s.P.rows("提出記録")[3][5] === "2026-09-25 08:30:00", s.P.rows("提出記録")[3]);
+  ok("未来の時刻は受け取った時刻にする", s.P.rows("記録").filter(r => r[1] === "3")[0][2] === "○ 8:30", s.P.rows("記録"));
 }
 
 console.log("■ 欠席は「休」、免除は係に理由を見せない");
@@ -98,7 +95,7 @@ console.log("■ 欠席は「休」、免除は係に理由を見せない");
   ok("先生が欠席にした子は全品目が「休」", [1, 2, 3].every(n => st.cells["3:" + n] === "rest"), st.cells);
   ok("免除は枠ごとに excused", !!st.excused["19:2"] && !st.excused["19:1"], st.excused);
   const r = s.apiMark([{id:"ev-abs-01", date:st.date, no:3, slot:1, op:"off", at:JST(st.date, "08:10")}]);
-  ok("欠席の子でも係が空白に戻せる", !r.state.cells["3:1"] && r.state.cells["3:2"] === "rest", r.state.cells);
+  ok("欠席の子でも係が空白に戻せる（消は休より強い）", !r.state.cells["3:1"] && r.state.cells["3:2"] === "rest", r.state.cells);
   ok("理由（メモ）は係に渡さない", JSON.stringify(st).indexOf("けが") < 0);
 }
 
@@ -113,15 +110,15 @@ console.log("■ 先生が品目・名簿・過去の日を直す");
 
   s.apiSaveDay("2026-09-24", [{slot:1, name:"漢字ドリル"}]);
   s.apiMark([{id:"ev-past-01", date:"2026-09-24", no:1, slot:1, op:"on", at:T0, via:"teacher"}]);
-  const row = s.P.rows("提出記録")[0];
-  ok("先生は前の日に印を付けられる（先生の印として残る）", row && row[1] === "2026-09-24" && row[6] === "先生", row);
+  const row = s.P.rows("記録").filter(r => r[0] === "2026-09-24")[0];
+  ok("先生は前の日に印を付けられる（先生の印として残る）", row && row[0] === "2026-09-24" && row[2] === "*○", row);
   ok("先生の画面は理由と時刻まで持つ", s.apiTeacherDay("2026-09-24").cells["1:1"].via === "teacher");
-  s.P.append("提出記録", [["ev-late-01", "2026-09-24", 2, 1, "提出", "2026-09-24 16:00:00", "タップ", "", ""]]);
+  s.P.append("記録", [["2026-09-24", "2", "○ 8:40", "", "", "", "", "", "", "", ""]]);
   s.apiMark([{id:"ev-past-03", date:"2026-09-24", no:2, slot:1, op:"forgot", at:T0, via:"teacher"}]);
-  ok("前の日の直しは、その日のどの記録よりあと（朝に直しても勝つ）",
+  ok("前の日の直しはあと勝ち（係の印を上書きする）",
      s.apiTeacherDay("2026-09-24").cells["2:1"].state === "forgot");
-  s.P.replace("提出記録", s.P.rows("提出記録").slice(0, 1));
-  ok("8日より前は直せない", (s.apiMark([{id:"ev-past-02", date:"2026-09-10", no:1, slot:1, op:"on"}]), s.P.rows("提出記録").length === 1));
+  ok("直す前の係の印は残らない（セル上書き）", s.P.rows("記録").filter(r => r[0] === "2026-09-24" && r[1] === "2")[0][2] === "*忘");
+  ok("8日より前は直せない", (s.apiMark([{id:"ev-past-02", date:"2026-09-10", no:1, slot:1, op:"on"}]), !s.P.rows("記録").some(r => r[0] === "2026-09-10")));
 
   const su = s.apiSaveRoster([{no:2, name:"いし"}, {no:1, name:"あお"}, {no:1, name:"だぶり"}, {no:0, name:"x"}]);
   ok("名簿は番号順・重複と0番を捨てる", su.roster.map(r => r.no).join() === "1,2", su.roster);
@@ -138,16 +135,19 @@ console.log("■ 分析");
   const s = fresh();
   const d = ["2026-09-21", "2026-09-22", "2026-09-23", "2026-09-24"];
   d.forEach(x => s.apiSaveDay(x, [{slot:1, name:"漢字ドリル"}, {slot:2, name:"計算ドリル"}]));
-  const ev = [];
-  let n = 0;
-  const on = (date, no, slot, hm, via) => ev.push([`e${++n}`, date, no, slot, "提出", `${date} ${hm}:00`, via || "タップ", "", ""]);
-  d.forEach(x => { on(x, 1, 1, "08:00"); on(x, 1, 2, "08:10"); });
-  on(d[0], 2, 1, "08:30"); on(d[0], 2, 2, "08:30");
-  const put = (date, no, slot, hm, op) => ev.push([`e${++n}`, date, no, slot, op, `${date} ${hm}:00`, "タップ", "", ""]);
-  put(d[1], 2, 1, "08:00", "忘れた"); put(d[2], 2, 1, "08:00", "やっている");
-  put(d[3], 2, 1, "08:00", "提出"); put(d[3], 2, 1, "08:01", "取消");
-  on(d[0], 3, 1, "08:00"); on(d[1], 3, 1, "08:20"); on(d[2], 3, 1, "15:00", "先生");
-  s.P.append("提出記録", ev);
+  /* 「記録」はセルが最後の状態を持つので、書くのは各マスの最終形だけ */
+  const rows = [];
+  const cell = (date, no, slot, txt) => {
+    let r = rows.find(r => r[0] === date && String(r[1]) === String(no));
+    if(!r){ r = [date, String(no), "", "", "", "", "", "", "", "", ""]; rows.push(r); }
+    r[1 + slot] = txt;
+  };
+  d.forEach(x => { cell(x, 1, 1, "○ 8:00"); cell(x, 1, 2, "○ 8:10"); });
+  cell(d[0], 2, 1, "○ 8:30"); cell(d[0], 2, 2, "○ 8:30");
+  cell(d[1], 2, 1, "忘"); cell(d[2], 2, 1, "△");
+  cell(d[3], 2, 1, "消");                    /* 出してから取消 → 最後は空白 */
+  cell(d[0], 3, 1, "○ 8:00"); cell(d[1], 3, 1, "○ 8:20"); cell(d[2], 3, 1, "*○ 15:00");
+  s.P.append("記録", rows);
   s.apiSetAbsent(d[3], [3]);
   s.apiSaveExemptions([{no:3, slot:2}]);
   const r = s.apiStats();
@@ -157,7 +157,7 @@ console.log("■ 分析");
   ok("平均時刻", by[1].avg === "8:05", by[1].avg);
   ok("2番は 2/8、続けて3日出ていない", by[2].submitted === 2 && by[2].required === 8 && by[2].streak === 3 && by[2].flag, by[2]);
   ok("忘・△は未提出として数え、数も出す", by[2].forgot === 1 && by[2].doing === 1, by[2]);
-  ok("前の形の「取消」も空白として読む", by[2].submitted === 2);
+  ok("「消」（空白に戻した印）は空白として読む", by[2].submitted === 2);
   ok("免除と欠席の日は分母から外す（3番は 3/3、欠席は休の数に入れない）", by[3].required === 3 && by[3].submitted === 3 && by[3].rest === 0, by[3]);
   ok("先生が後から付けた印は時刻の平均に入れない", by[3].avg === "8:10", by[3].avg);
   ok("品目ごとの数", by[2].perItem["漢字ドリル"].sub === 1 && by[2].perItem["漢字ドリル"].req === 4, by[2].perItem);
@@ -190,9 +190,9 @@ console.log("■ 関門（アカウントで役を分ける）");
   ok("係の児童は名簿を書きかえられない", !!as(KID, () => s.apiSaveRoster([{no:1, name:"x"}])) && s.P.rows("名簿").length === 2);
   s.EMAIL = KID;
   s.apiMark([{id:"kid-00001", date:"2026-09-25", no:1, slot:1, op:"on", at:T0, via:"teacher"}]);
-  ok("係の児童の印は「タップ」として残る", s.P.rows("提出記録")[0][6] === "タップ", s.P.rows("提出記録")[0]);
+  ok("係の児童の印は先生の印にならない", s.P.rows("記録")[0][2] === "○ 8:30", s.P.rows("記録")[0]);
   s.apiMark([{id:"kid-00002", date:"2026-09-24", no:1, slot:1, op:"on", at:T0}]);
-  ok("係の児童は前の日を直せない", s.P.rows("提出記録").length === 1);
+  ok("係の児童は前の日を直せない", s.P.rows("記録").length === 1);
   ok("全角の＠でも寄せて比べる", s.Gate.judge("ＴＡＮＡＫＡ＠edu.nishi.or.jp").ok === true);
   ok("係の児童の役", s.Gate.who().role === "helper");
 }
@@ -212,7 +212,7 @@ console.log("■ 係の児童のアカウント（係シート）");
   const hp = s.apiMark([{id:"hp-000001", date:"2026-09-25", no:1, slot:1, op:"on", at:JST("2026-09-25","08:30"), via:"tap"}]);
   ok("係もタップを書ける", hp.state.cells["1:1"] === "on", hp.state.cells);
   s.apiMark([{id:"hp-000002", date:"2026-09-24", no:1, slot:1, op:"on", at:JST("2026-09-24","08:30"), via:"tap"}]);
-  ok("きのう分は書けない（本日だけ）", s.P.rows("提出記録").length === 1);
+  ok("きのう分は書けない（本日だけ）", s.P.rows("記録").length === 1);
   ok("先生の口は呼べない", !!throws(() => s.apiSetup()));
 
   s.EMAIL = "87654321@kyoiku.edu.nishi.or.jp";
@@ -251,6 +251,43 @@ console.log("■ 係の期限は学期末が上限");
   ok("新学期に保存し直すと次の学期末になる", r2.helpers[0].until === "2027-03-31", r2.helpers);
   s.EMAIL = "12345678@kyoiku.edu.nishi.or.jp";
   ok("再登録すれば開ける", s.Gate.who().role === "helper");
+}
+
+console.log("■ 係の画面は 8:00〜14:00（日本時間）だけ");
+{
+  const s = load({gate:true});
+  s.P._reset(); s.P._setNow(JST("2026-09-25", "07:30"));
+  s.P.replace("名簿", [[1, "あお"], [2, "いし"]]);
+  s.EMAIL = "tanaka@edu.nishi.or.jp";
+  s.apiSaveHelpers([{email:"12345678@kyoiku.edu.nishi.or.jp", until:"", memo:""}]);
+  const KID = "12345678@kyoiku.edu.nishi.or.jp";
+
+  s.EMAIL = KID;
+  ok("8:00より前は閉室（closed を返す）", s.apiToday().closed === true);
+  ok("8:00より前は書けない", s.apiMark([{id:"h-000001", date:"2026-09-25", no:1, slot:1, op:"on", at:JST("2026-09-25","07:59")}]).closed === true
+                            && s.P.rows("記録").length === 0);
+
+  s.P._setNow(JST("2026-09-25", "08:00"));
+  ok("8:00ちょうどに開く", s.apiToday().date === "2026-09-25");
+
+  s.P._setNow(JST("2026-09-25", "14:05"));
+  ok("14:00を過ぎると係は読めない", s.apiToday().closed === true);
+  const late = s.apiMark([{id:"h-000002", date:"2026-09-25", no:1, slot:1, op:"on", at:JST("2026-09-25","13:59")}]);
+  ok("閉室直後の10分は、直前に押した分を受ける", late.state && late.state.cells["1:1"] === "on", late);
+
+  s.P._setNow(JST("2026-09-25", "14:11"));
+  const out = s.apiMark([{id:"h-000003", date:"2026-09-25", no:1, slot:2, op:"on", at:JST("2026-09-25","14:11")}]);
+  ok("猶予を越えると書けない", out.closed === true && s.P.rows("記録")[0][3] === "", s.P.rows("記録"));
+
+  s.EMAIL = "tanaka@edu.nishi.or.jp";
+  ok("先生は時間外でもきょうの表を見られる", s.apiToday().date === "2026-09-25" && s.apiToday().cells["1:1"] === "on");
+  const fix = s.apiMark([{id:"t-000001", date:"2026-09-25", no:1, slot:2, op:"forgot", at:JST("2026-09-25","14:11"), via:"teacher"}]);
+  ok("先生は時間外でも直せる", !fix.closed && s.P.rows("記録")[0][3] === "*忘 14:11", s.P.rows("記録")[0]);
+
+  s.EMAIL = KID;
+  s.P._setNow(JST("2026-09-26", "08:00"));
+  ok("翌日の8:00にはまた開く（きのうの行はそのまま）",
+     s.apiToday().date === "2026-09-26" && s.P.rows("記録").length === 1);
 }
 
 done();

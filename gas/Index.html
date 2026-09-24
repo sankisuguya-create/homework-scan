@@ -122,6 +122,12 @@ button{cursor:pointer;touch-action:manipulation}
 .none p{font-size:24px;margin:0}
 .none .ic{width:96px;height:96px}
 
+/* 係の画面の閉室中（8:00〜14:00 以外） */
+.closed{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;text-align:center}
+.closed .mark{font-size:64px;font-weight:800;letter-spacing:.1em;padding:20px 48px;border:6px solid var(--ink);border-radius:var(--r);background:var(--soft)}
+.closed .msg{font-size:28px;font-weight:700;margin:0}
+.closed .sub{font-size:20px;color:var(--sub);margin:0}
+
 /* ================= 先生の画面 ================= */
 .teacher{min-height:100vh;display:flex;flex-direction:column}
 .tbar{display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:var(--line);flex-wrap:wrap;position:sticky;top:0;background:var(--paper);z-index:5}
@@ -197,8 +203,8 @@ var BOOT = <?!= boot ?>;
 
    ■ 1マスの状態（係がタップするたびに次へ進む）
        空白 → ○提出(on) → 休(rest) → 忘(forgot) → △やっている(doing) → 空白
-       「その日・その子・その枠」の記録を時刻順に並べ、**最後の操作**がそのマスの状態。
-       記録は消さずに足すだけ。空白に戻すのも「空白(off)」という記録を足す。
+       「記録」シートに1日×児童ごとの1行があり、マスのセルは
+       **最後の操作**で書きかわる（消えてから足すのではなく上書き）。
        集計では ○ と 休 を「提出」、忘・△・空白を「未提出」として数える。
 ================================================================== */
 var Domain = (function(){
@@ -258,6 +264,15 @@ var Domain = (function(){
   function weekday(date){
     var p = date.split("-").map(Number);
     return "日月火水木金土".charAt(new Date(Date.UTC(p[0], p[1] - 1, p[2])).getUTCDay());
+  }
+
+  /* 係の画面を使える時刻（日本時間）。8:00 から 14:00 まで。
+     係の児童はこの間だけ見られる・書ける。先生（教職員）はいつでも。
+     graceMin は「閉まってからも少しの間は受ける」幅（分）。 */
+  var OPEN = {from:8 * 60, to:14 * 60};
+  function openAt(ms, graceMin){
+    var p = jstParts(ms), m = p.h * 60 + p.mi;
+    return m >= OPEN.from && m < OPEN.to + (graceMin || 0);
   }
 
   /* 係の期限の上限。学期の終わり（3月末・8月末・12月末）のうち、
@@ -475,6 +490,7 @@ var Domain = (function(){
     pad:pad, jstDate:jstDate, jstStamp:jstStamp, jstParts:jstParts,
     stampMinutes:stampMinutes, hhmm:hhmm, isDate:isDate, asDate:asDate, asStamp:asStamp,
     addDays:addDays, weekday:weekday, toInt:toInt, termEnd:termEnd,
+    OPEN:OPEN, openAt:openAt,
     isExempt:isExempt, finalMarks:finalMarks, dayView:dayView, dayDetail:dayDetail,
     stats:stats, parseRoster:parseRoster
   };
@@ -601,6 +617,9 @@ function toast(msg, ng){
    ■ 免除のマスは ○ と同じ見た目（理由は係に見せない）。タップしても変わらない
    ■ タップした記録は、まずこの端末に貯めてからサーバへ送る。
      つながらなくても印は消えず、つながったときにまとめて送る。
+   ■ 係の画面が使えるのは 8:00〜14:00（日本時間）。その外は「閉室中」。
+     端末の時計で決めるので、オフラインでも 14:00 になれば閉じる。
+     （教職員のアカウント＝先生には関門なし）
 ================================================================== */
 var MARK = {
   on:     {ch:"○", label:"出した"},
@@ -623,6 +642,33 @@ var Helper = (function(){
   var queue = loadQueue();
   var online = true, busy = false, reqNo = 0, applied = 0, timer = null, backoff = 0;
   var root = null, active = false, n = 0, opts = {};
+  var gateT = null, closedServer = false;
+
+  /* 開いているか＝係の役でなければ常に開放。係なら端末の時計（日本時間）で判断 */
+  function openNow(){ return !!opts.staff || Domain.openAt(Date.now()); }
+  function closedNow(){ return !openNow() || closedServer; }
+  /* 次に開閉が切りかわる時刻（端末の時計の ms で返す） */
+  function nextBoundary(){
+    var p = Domain.jstParts(Date.now());
+    var today0 = Date.now() - (p.h * 3600 + p.mi * 60 + p.s) * 1000;
+    var m = p.h * 60 + p.mi + p.s / 60;
+    if(m < Domain.OPEN.from) return today0 + Domain.OPEN.from * 60000;   /* けさの 8:00 */
+    if(m < Domain.OPEN.to)   return today0 + Domain.OPEN.to * 60000;     /* きょうの 14:00 */
+    return today0 + 86400000 + Domain.OPEN.from * 60000;                 /* あすの 8:00 */
+  }
+  /* 境目で閉じる・開ける。14:00 では、たまっている分を先に送ってから閉室中にする */
+  function gate(){
+    clearTimeout(gateT);
+    if(!active || opts.staff) return;
+    var wait = Math.max(500, nextBoundary() - Date.now());
+    gateT = setTimeout(function(){
+      closedServer = false;
+      if(openNow()) kick();
+      else { sync().then(render, render); }   /* 14:00 → 残りを送ってから閉じる */
+      render();
+      gate();
+    }, Math.min(wait, 86400000));
+  }
 
   function device(){
     try{
@@ -651,6 +697,7 @@ var Helper = (function(){
     var my = ++reqNo;
     return call.apply(null, [name].concat(args || [])).then(function(r){
       online = true; backoff = 0;
+      if(r && r.closed) closedServer = true;
       var st = r && r.state ? r.state : r;
       if(r && r.processed){
         var p = {}; r.processed.forEach(function(id){ p[id] = true; });
@@ -677,7 +724,7 @@ var Helper = (function(){
   }
   function schedule(){
     clearTimeout(timer);
-    if(!active) return;
+    if(!active || closedNow()) return;   /* 閉室中はサーバを呼ばない */
     timer = setTimeout(function(){ sync().then(schedule, schedule); }, backoff || (queue.length ? 1500 : 15000));
   }
   function kick(){ sync().then(schedule, schedule); }
@@ -774,8 +821,15 @@ var Helper = (function(){
         }).join('<span class="arr">→</span>') + '</div>';
   }
 
+  function closedHtml(){
+    var before = Domain.jstParts(Date.now()).h * 60 + Domain.jstParts(Date.now()).mi < Domain.OPEN.from;
+    return '<div class="helper"><div class="closed"><div class="mark">閉室中</div>'
+      + '<p class="msg">' + (before ? 'あけるのは 8:00 からです' : 'きょうの うけつけは おわりました') + '</p>'
+      + '<p class="sub">つかえるのは 8:00〜14:00</p></div></div>';
+  }
   function render(){
     if(!root || !active) return;
+    if(closedNow()){ root.innerHTML = closedHtml(); return; }
     if(!S){ root.innerHTML = '<div class="helper"><div class="none">' + icon("sync") + 'よみこみ中…</div></div>'; return; }
     var cells = view();
     var net = online
@@ -803,8 +857,8 @@ var Helper = (function(){
     root.innerHTML = '<div class="helper">' + head + body + '</div>';
   }
 
-  function mount(el, o){ root = el; opts = o || {}; active = true; render(); kick(); }
-  function unmount(){ active = false; clearTimeout(timer); }
+  function mount(el, o){ root = el; opts = o || {}; active = true; closedServer = false; render(); kick(); gate(); }
+  function unmount(){ active = false; clearTimeout(timer); clearTimeout(gateT); }
 
   document.addEventListener("click", function(e){
     if(!active || !root || !root.contains(e.target)) return;
@@ -1083,7 +1137,7 @@ var Teacher = (function(){
             + '<td><button class="btn small" data-t="ro-del" data-i="' + i + '">' + icon("trash") + 'けす</button></td></tr>';
         }).join("") : '<tr><td colspan="3">まだ ありません</td></tr>')
       + '</tbody></table></div>'
-      + '<div class="sec" style="flex:1;min-width:300px"><label class="field">' + icon("paste") + ' スプレッドシートから 貼りつける（番号と氏名の2列）'
+      + '<div class="sec" style="flex:1;min-width:300px"><label class="field">' + icon("paste") + ' 元の名簿から 範囲コピーして 貼りつける（行の数字が番号、はじめの文字の列が氏名。余分な列は 読み飛ばします）'
       + '<textarea id="ro-paste" placeholder="1&#9;あおき はると&#10;2&#9;いしかわ めい"></textarea></label>'
       + '<div class="line"><button class="btn" data-t="ro-read">' + icon("paste") + '貼りつけた名簿を 読む</button></div></div></div>'
       + '<div class="line"><button class="btn" data-t="ro-add">' + icon("plus") + '1人 たす</button>'

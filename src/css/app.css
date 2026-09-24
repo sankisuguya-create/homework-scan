@@ -112,6 +112,12 @@ button{cursor:pointer;touch-action:manipulation}
 .none p{font-size:24px;margin:0}
 .none .ic{width:96px;height:96px}
 
+/* 係の画面の閉室中（8:00〜14:00 以外） */
+.closed{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;text-align:center}
+.closed .mark{font-size:64px;font-weight:800;letter-spacing:.1em;padding:20px 48px;border:6px solid var(--ink);border-radius:var(--r);background:var(--soft)}
+.closed .msg{font-size:28px;font-weight:700;margin:0}
+.closed .sub{font-size:20px;color:var(--sub);margin:0}
+
 /* ================= 先生の画面 ================= */
 .teacher{min-height:100vh;display:flex;flex-direction:column}
 .tbar{display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:var(--line);flex-wrap:wrap;position:sticky;top:0;background:var(--paper);z-index:5}

@@ -13,8 +13,8 @@
 
    ■ 1マスの状態（係がタップするたびに次へ進む）
        空白 → ○提出(on) → 休(rest) → 忘(forgot) → △やっている(doing) → 空白
-       「その日・その子・その枠」の記録を時刻順に並べ、**最後の操作**がそのマスの状態。
-       記録は消さずに足すだけ。空白に戻すのも「空白(off)」という記録を足す。
+       「記録」シートに1日×児童ごとの1行があり、マスのセルは
+       **最後の操作**で書きかわる（消えてから足すのではなく上書き）。
        集計では ○ と 休 を「提出」、忘・△・空白を「未提出」として数える。
 ================================================================== */
 var Domain = (function(){
@@ -74,6 +74,15 @@ var Domain = (function(){
   function weekday(date){
     var p = date.split("-").map(Number);
     return "日月火水木金土".charAt(new Date(Date.UTC(p[0], p[1] - 1, p[2])).getUTCDay());
+  }
+
+  /* 係の画面を使える時刻（日本時間）。8:00 から 14:00 まで。
+     係の児童はこの間だけ見られる・書ける。先生（教職員）はいつでも。
+     graceMin は「閉まってからも少しの間は受ける」幅（分）。 */
+  var OPEN = {from:8 * 60, to:14 * 60};
+  function openAt(ms, graceMin){
+    var p = jstParts(ms), m = p.h * 60 + p.mi;
+    return m >= OPEN.from && m < OPEN.to + (graceMin || 0);
   }
 
   /* 係の期限の上限。学期の終わり（3月末・8月末・12月末）のうち、
@@ -291,6 +300,7 @@ var Domain = (function(){
     pad:pad, jstDate:jstDate, jstStamp:jstStamp, jstParts:jstParts,
     stampMinutes:stampMinutes, hhmm:hhmm, isDate:isDate, asDate:asDate, asStamp:asStamp,
     addDays:addDays, weekday:weekday, toInt:toInt, termEnd:termEnd,
+    OPEN:OPEN, openAt:openAt,
     isExempt:isExempt, finalMarks:finalMarks, dayView:dayView, dayDetail:dayDetail,
     stats:stats, parseRoster:parseRoster
   };

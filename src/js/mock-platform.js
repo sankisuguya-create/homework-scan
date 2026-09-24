@@ -37,6 +37,7 @@ var P = (function(){
     tail: function(n, c){ var t = table(n); return copy(t.slice(Math.max(0, t.length - c))); },
     append: function(n, list){ var t = table(n); list.forEach(function(r){ t.push(norm(n, r)); }); save(); },
     replace: function(n, list){ db.tables[n] = list.map(function(r){ return norm(n, r); }); save(); },
+    put: function(n, i, r){ db.tables[n][i] = norm(n, r); save(); },
     prop: function(k){ return db.props[k] == null ? null : db.props[k]; },
     setProp: function(k, v){ db.props[k] = String(v); save(); },
     cacheGet: function(k){

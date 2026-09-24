@@ -18,7 +18,7 @@ var TABLES = {
   "名簿":     ["番号", "氏名"],
   "品目":     ["枠", "名前", "アイコン", "いつも出す", "色"],
   "日の品目": ["日付", "枠", "名前"],
-  "提出記録": ["記録ID", "日付", "番号", "枠", "操作", "時刻", "入力", "端末", "受信"],
+  "記録":     ["日付", "番号", "枠1", "枠2", "枠3", "枠4", "枠5", "枠6", "枠7", "枠8", "枠9"],
   "欠席":     ["日付", "番号"],
   "免除":     ["開始日", "終了日", "番号", "枠", "メモ"],
   "操作記録": ["時刻", "種類", "内容", "利用者"],
@@ -44,11 +44,11 @@ var DEFAULT_ROWS = {
 };
 var OP  = {on:"提出", rest:"休み", forgot:"忘れた", doing:"やっている", off:"空白"};
 var VIA = {tap:"タップ", teacher:"先生"};
-var TAIL = 5000;
+var GLYPH = {on:"○", rest:"休", forgot:"忘", doing:"△", off:"消"};
+var MARK_GRACE = 10;   /* 14:00 の閉室を過ぎても、少し前に押した分を受ける幅（分） */
 
 function invert(o){ var r = {}; Object.keys(o).forEach(function(k){ r[o[k]] = k; }); return r; }
-var OP_R = invert(OP), VIA_R = invert(VIA);
-OP_R["取消"] = "off";
+var GLYPH_R = invert(GLYPH);
 
 /* ── 関門 ───────────────────────────────── */
 /* 教職員、または「係」シートの児童（期限内）。どちらでもなければ例外 */
@@ -95,13 +95,37 @@ function readDays(){
   Object.keys(days).forEach(function(d){ days[d].sort(function(a, b){ return a.slot - b.slot; }); });
   return days;
 }
-function toEvent(r, i){
-  return {id:String(r[0]), date:Domain.asDate(r[1]), no:Domain.toInt(r[2]), slot:Domain.toInt(r[3]),
-          op:OP_R[String(r[4])] || "", at:Domain.asStamp(r[5]), via:VIA_R[String(r[6])] || "tap", seq:i};
+/* ── 「記録」の行 ───────────────────────────
+   1日×児童ごとの1行：日付,番号,枠1…枠9。セルは「いまの状態」で上書きする。
+   セルの文字："○ 8:12"「△」「忘」「*忘」（先頭の * は先生の印）、
+   "消" は空白に戻した印（欠席の「休」より強い）。 */ 
+function recCellParse(v){
+  var m = /^(\*)?([○休忘△消])(?:\s+(\d{1,2}):(\d{2}))?$/.exec(String(v == null ? "" : v).trim());
+  if(!m || !GLYPH_R[m[2]]) return null;
+  return {op:GLYPH_R[m[2]], via:m[1] ? "teacher" : "tap",
+          hm:m[3] == null ? null : Number(m[3]) * 60 + Number(m[4])};
 }
-function readEvents(all){
-  var rows = all ? P.rows("提出記録") : P.tail("提出記録", TAIL);
-  return rows.map(toEvent).filter(function(e){ return e.date && e.no && e.slot && e.op; });
+function recCellText(op, via, atMs){
+  var s = (via === "teacher" ? "*" : "") + GLYPH[op];
+  if(atMs != null){ var p = Domain.jstParts(atMs); s += " " + p.h + ":" + Domain.pad(p.mi); }
+  return s;
+}
+/* 「記録」の行を記録の並び（events）に直す。
+   セル1つが記録1つ（セルは最後の状態を持つので並び替えは要らない）。 */
+function readEvents(){
+  var evs = [];
+  P.rows("記録").forEach(function(r, i){
+    var date = Domain.asDate(r[0]), no = Domain.toInt(r[1]);
+    if(!date || !no) return;
+    for(var s = 1; s <= Domain.SLOTS; s++){
+      var c = recCellParse(r[1 + s]);
+      if(!c) continue;
+      evs.push({id:"rec-" + i + "-" + s, date:date, no:no, slot:s, op:c.op,
+                at:c.hm == null ? "" : date + " " + Domain.hhmm(c.hm) + ":00",
+                via:c.via, seq:i});
+    }
+  });
+  return evs;
 }
 function readAbsences(){
   return P.rows("欠席").map(function(r){ return {date:Domain.asDate(r[0]), no:Domain.toInt(r[1])}; })
@@ -165,7 +189,7 @@ function helperState(ctx){
   var days = ctx.days || readDays(), slots = ctx.slots || readSlots();
   var items = itemsFor(date, days, slots).items;
   var roster = ctx.roster || readRoster();
-  var events = ctx.events || readEvents(false);
+  var events = ctx.events || readEvents();
   var v = Domain.dayView({date:date, items:items, roster:roster, events:events,
                           absences:readAbsences(), exemptions:readExemptions()});
   var st = ctx.settings || readSettings();
@@ -173,42 +197,54 @@ function helperState(ctx){
           roster: roster.map(function(s){ return {no:s.no, name: st.showNames ? s.name : ""}; }),
           cells:v.cells, excused:v.excused, now:P.now()};
 }
+/* 係の画面を使えるのは 8:00〜14:00（日本時間）。閉じている間は closed を返す。
+   先生（staff）はいつでも見られる。端末側でも同じ時刻で閉じるので、
+   オフラインでも「閉室中」にかわる。 */ 
 function apiToday(){
-  guard();
+  var who = guard();
+  if(who.role === "helper" && !Domain.openAt(P.now())) return {closed:true};
   return helperState();
 }
 
 /* マスの状態を変える。events は端末に貯めた分をまとめて送ってくる。
    op は「この状態にする」（on/rest/forgot/doing/off）。「次へ進める」ではないので、
    送り直しても、2台が同じマスを押しても、状態がとびとびに進んでしまうことはない。
-   同じ記録IDは2度書かない（通信が切れて送り直しても重ならない）。
-   sentAt は端末が送った時の端末の時計。サーバの時計との差で、各記録の時刻を直す
-   （端末の時計がずれていても、2台の印の前後が入れかわらない）。
-   きょう以外の日を直すのは先生（教職員のアカウント）だけ。過ぎた日の直しはその日の
-   23:59:59 に置き、その日のどの記録よりも後（＝いまの状態）にする。 */
+   「記録」の「日付×番号」の行にある枠のセルを上書きする（行がなければ足す）。
+   複数の PC が並行して押してもロックして順に処理するので、あとから届いた入力が
+   そのマスの状態になる（あと入力が優先）。同じ記録を送り直しても同じ状態が
+   上書きされるだけなので増えない。
+   sentAt は端末が送った時の端末の時計。サーバの時計との差で、記録に残す時刻を直す
+   （端末の時計がずれていても、押した時刻が大きくずれて残らない）。
+   係が書けるのは開いている時間（8:00〜14:00＋10分の猶予）できょうの分だけ。
+   きょう以外の日を直すのは先生（教職員のアカウント）だけ。 */
 function apiMark(events, sentAt){
   var who = guard();
   var isTeacher = who.role === "staff";
-  var now = P.now(), date0 = today(), recv = Domain.jstStamp(now);
+  var now = P.now(), date0 = today();
+  var list = Array.isArray(events) ? events.slice(0, 500) : [];
+  var processed = [];
+  list.forEach(function(e){
+    if(e && typeof e === "object" && /^[\w-]{6,40}$/.test(String(e.id || "")))
+      processed.push(String(e.id));
+  });
+  if(!isTeacher && !Domain.openAt(now, MARK_GRACE)) return {closed:true, processed:processed};
   var skew = Number(sentAt);
   skew = isFinite(skew) && sentAt !== null && sentAt !== "" ? now - skew : 0;
   if(Math.abs(skew) > 8 * 86400000) skew = 0;
   var rosterList = readRoster(), roster = {};
   rosterList.forEach(function(s){ roster[s.no] = true; });
   var slots = readSlots(), settings = readSettings();
-  var list = Array.isArray(events) ? events.slice(0, 500) : [];
-  var processed = [], rows = [], tailRows = [], days = null;
+  var days = null;
   P.lock(function(){
     days = readDays();
-    tailRows = P.tail("提出記録", TAIL);
-    var seen = {};
-    tailRows.forEach(function(r){ seen[String(r[0])] = true; });
+    var recs = P.rows("記録");
+    var recIdx = {};
+    recs.forEach(function(r, i){ recIdx[Domain.asDate(r[0]) + "|" + Domain.toInt(r[1])] = i; });
+    var dirty = {}, fresh = [];
     list.forEach(function(e){
       if(!e || typeof e !== "object") return;
       var id = String(e.id || "");
       if(!/^[\w-]{6,40}$/.test(id)) return;
-      processed.push(id);
-      if(seen[id]) return;
       var date = Domain.asDate(e.date);
       if(!date || date > date0 || date < Domain.addDays(date0, -7)) return;
       if(date !== date0 && !isTeacher) return;
@@ -222,16 +258,24 @@ function apiMark(events, sentAt){
       var at = Number(e.at) + skew;
       if(!isFinite(at) || at > now + 5 * 60000 || at < now - 8 * 86400000) at = now;
       if(date === date0) ensureDay(date, days, slots);
-      var stamp = date === date0 ? Domain.jstStamp(at) : date + " 23:59:59";
-      seen[id] = true;
-      rows.push([id, date, no, slot, OP[e.op], stamp, VIA[via],
-                 String(e.dev || "").slice(0, 20), recv]);
+      var key = date + "|" + no, idx = recIdx[key], row, added = false;
+      if(idx == null){
+        row = [date, String(no), "", "", "", "", "", "", "", "", ""];
+        idx = recs.push(row) - 1; recIdx[key] = idx; fresh.push(row); added = true;
+      }else{
+        row = recs[idx];
+      }
+      var cell = recCellText(e.op, via, date === date0 ? at : null);
+      if(row[1 + slot] !== cell){
+        row[1 + slot] = cell;
+        if(!added) dirty[idx] = true;
+      }
     });
-    P.append("提出記録", rows);
+    Object.keys(dirty).forEach(function(i){ P.put("記録", Number(i), recs[i]); });
+    P.append("記録", fresh);
   });
-  var evs = tailRows.concat(rows).map(toEvent).filter(function(e){ return e.date && e.no && e.slot && e.op; });
   return {processed:processed,
-          state:helperState({days:days, slots:slots, roster:rosterList, events:evs, settings:settings})};
+          state:helperState({days:days, slots:slots, roster:rosterList, settings:settings})};
 }
 
 function log(kind, detail, email){
@@ -248,7 +292,7 @@ function apiTeacherDay(date){
   var items = f.draft && date !== d0 ? [] : f.items;
   var roster = readRoster(), absences = readAbsences();
   var cells = Domain.dayDetail({date:date, items:items, roster:roster,
-                                events:readEvents(date < Domain.addDays(d0, -14)),
+                                events:readEvents(),
                                 absences:absences, exemptions:readExemptions()});
   return {date:date, wd:Domain.weekday(date), today:d0, hasDay: !f.draft,
           items:items, slots:readSlots(), roster:roster, cells:cells,
@@ -381,7 +425,7 @@ function apiStats(from, to){
   var st = readSettings(), d0 = today();
   from = Domain.asDate(from) || st.from || "";
   to = Domain.asDate(to) || Domain.addDays(d0, -1);
-  var r = Domain.stats({days:readDays(), roster:readRoster(), events:readEvents(true),
+  var r = Domain.stats({days:readDays(), roster:readRoster(), events:readEvents(),
                         absences:readAbsences(), exemptions:readExemptions(),
                         from:from, to:to, rateMin: st.ratePct / 100, streakMin: st.streakMin});
   r.from = from; r.to = to;
