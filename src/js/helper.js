@@ -38,12 +38,18 @@ var Helper = (function(){
   function closedNow(){ return !openNow() || closedServer; }
   /* 次に開閉が切りかわる時刻（端末の時計の ms で返す） */
   function nextBoundary(){
-    var p = Domain.jstParts(Date.now());
-    var today0 = Date.now() - (p.h * 3600 + p.mi * 60 + p.s) * 1000;
+    var now = Date.now();
+    var p = Domain.jstParts(now);
+    var today0 = now - (p.h * 3600 + p.mi * 60 + p.s) * 1000;
     var m = p.h * 60 + p.mi + p.s / 60;
-    if(m < Domain.OPEN.from) return today0 + Domain.OPEN.from * 60000;   /* けさの 8:00 */
-    if(m < Domain.OPEN.to)   return today0 + Domain.OPEN.to * 60000;     /* きょうの 14:00 */
-    return today0 + 86400000 + Domain.OPEN.from * 60000;                 /* あすの 8:00 */
+    if(p.wd !== 0 && p.wd !== 6){
+      if(m < Domain.OPEN.from) return today0 + Domain.OPEN.from * 60000;   /* けさの 8:00 */
+      if(m < Domain.OPEN.to)   return today0 + Domain.OPEN.to * 60000;     /* きょうの 14:00 */
+    }
+    /* あす以降で最初の平日の 8:00 */
+    var t = today0, wd = p.wd;
+    do{ t += 86400000; wd = (wd + 1) % 7; }while(wd === 0 || wd === 6);
+    return t + Domain.OPEN.from * 60000;
   }
   /* 境目で閉じる・開ける。14:00 では、たまっている分を先に送ってから閉室中にする */
   function gate(){
@@ -211,10 +217,15 @@ var Helper = (function(){
   }
 
   function closedHtml(){
-    var before = Domain.jstParts(Date.now()).h * 60 + Domain.jstParts(Date.now()).mi < Domain.OPEN.from;
+    var p = Domain.jstParts(Date.now());
+    var wknd = p.wd === 0 || p.wd === 6;
+    var before = p.h * 60 + p.mi < Domain.OPEN.from;
+    var msg = wknd ? 'きょうは おやすみです'
+      : before ? 'あけるのは 8:00 からです'
+      : 'きょうの うけつけは おわりました';
     return '<div class="helper"><div class="closed"><div class="mark">閉室中</div>'
-      + '<p class="msg">' + (before ? 'あけるのは 8:00 からです' : 'きょうの うけつけは おわりました') + '</p>'
-      + '<p class="sub">つかえるのは 8:00〜14:00</p></div></div>';
+      + '<p class="msg">' + msg + '</p>'
+      + '<p class="sub">つかえるのは 平日 8:00〜14:00</p></div></div>';
   }
   function render(){
     if(!root || !active) return;

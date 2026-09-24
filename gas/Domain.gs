@@ -76,12 +76,15 @@ var Domain = (function(){
     return "日月火水木金土".charAt(new Date(Date.UTC(p[0], p[1] - 1, p[2])).getUTCDay());
   }
 
-  /* 係の画面を使える時刻（日本時間）。8:00 から 14:00 まで。
-     係の児童はこの間だけ見られる・書ける。先生（教職員）はいつでも。
+  /* 係の画面を使える時間（日本時間）。平日の 8:00 から 14:00 まで。
+     土曜・日曜は終日「閉室中」。係の児童はこの間だけ見られる・書ける。
+     先生（教職員）はいつでも。
      graceMin は「閉まってからも少しの間は受ける」幅（分）。 */
   var OPEN = {from:8 * 60, to:14 * 60};
   function openAt(ms, graceMin){
-    var p = jstParts(ms), m = p.h * 60 + p.mi;
+    var p = jstParts(ms);
+    if(p.wd === 0 || p.wd === 6) return false;
+    var m = p.h * 60 + p.mi;
     return m >= OPEN.from && m < OPEN.to + (graceMin || 0);
   }
 

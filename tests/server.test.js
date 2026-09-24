@@ -18,6 +18,7 @@ console.log("■ 日付と時刻（日本時間）");
   ok("開室の境目 8:00", D.openAt(JST("2026-09-25", "08:00")) === true && D.openAt(JST("2026-09-25", "07:59")) === false);
   ok("閉室の境目 14:00", D.openAt(JST("2026-09-25", "13:59")) === true && D.openAt(JST("2026-09-25", "14:00")) === false);
   ok("猶予ありなら14:10まで", D.openAt(JST("2026-09-25", "14:09"), 10) === true && D.openAt(JST("2026-09-25", "14:10"), 10) === false);
+  ok("土日は開かない", D.openAt(JST("2026-09-26", "10:00")) === false && D.openAt(JST("2026-09-26", "10:00"), 10) === false && D.openAt(JST("2026-09-27", "12:00")) === false);
 }
 
 console.log("■ 名簿の貼り付け");
@@ -285,9 +286,14 @@ console.log("■ 係の画面は 8:00〜14:00（日本時間）だけ");
   ok("先生は時間外でも直せる", !fix.closed && s.P.rows("記録")[0][3] === "*忘 14:11", s.P.rows("記録")[0]);
 
   s.EMAIL = KID;
-  s.P._setNow(JST("2026-09-26", "08:00"));
-  ok("翌日の8:00にはまた開く（きのうの行はそのまま）",
-     s.apiToday().date === "2026-09-26" && s.P.rows("記録").length === 1);
+  s.P._setNow(JST("2026-09-26", "10:00"));
+  ok("土曜は終日閉室", s.apiToday().closed === true
+     && s.apiMark([{id:"h-000004", date:"2026-09-26", no:1, slot:1, op:"on", at:JST("2026-09-26","10:00")}]).closed === true);
+  s.P._setNow(JST("2026-09-27", "08:00"));
+  ok("日曜の8:00も開かない", s.apiToday().closed === true);
+  s.P._setNow(JST("2026-09-28", "08:00"));
+  ok("月曜の8:00にはまた開く（金曜の行はそのまま）",
+     s.apiToday().date === "2026-09-28" && s.P.rows("記録").length === 1);
 }
 
 done();
