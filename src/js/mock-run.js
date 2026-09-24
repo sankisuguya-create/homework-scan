@@ -9,7 +9,7 @@ var google = {script: {run: (function(){
     };
     ["apiToday", "apiMark", "apiTeacherDay",
      "apiSaveDay", "apiSetAbsent", "apiSetup", "apiSaveRoster", "apiSaveSlots",
-     "apiSaveExemptions", "apiSaveSettings", "apiStats", "apiLogs"].forEach(function(name){
+     "apiSaveExemptions", "apiSaveSettings", "apiStats", "apiLogs", "apiSaveHelpers"].forEach(function(name){
       r[name] = function(){
         var args = JSON.parse(JSON.stringify(Array.prototype.slice.call(arguments)));
         setTimeout(function(){

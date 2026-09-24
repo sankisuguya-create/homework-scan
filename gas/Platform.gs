@@ -86,7 +86,7 @@ var P = (function(){
   return {rows:rows, tail:tail, append:append, replace:replace,
           prop:prop, setProp:setProp, cacheGet:cacheGet, cachePut:cachePut, cacheDel:cacheDel,
           lock:lock, now:now, uuid:uuid, hash:hash, url:url,
-          who:function(){ return Gate.check(); }};
+          who:function(){ return Gate.checkAny(); }};
 })();
 
 /* 最初に1回、Apps Script エディタから実行する。表を全部作る。 */
@@ -101,14 +101,13 @@ function setupSheets(){
    入口。通らない人には画面もデータも渡さない。
 ------------------------------------------------------------------ */
 function doGet(e){
-  var j = Gate.judge(Gate.activeEmail());
-  if(j.ok && j.role === "helper" && !isHelper(j.email)) j = {ok:false, code:"not-helper", email:j.email};
-  if(!j.ok) return Gate.denyPage(j);
+  var w = Gate.who();
+  if(w.role === "none") return Gate.denyPage(w);
   var q = (e && e.parameter) || {};
-  var view = j.role === "staff" && q.view === "teacher" ? "teacher" : "helper";
-  try{ log(view === "teacher" ? "先生の画面を開いた" : "係の画面を開いた", "", j.email); }catch(err){}
+  var view = (w.role === "staff" && q.view === "teacher") ? "teacher" : "helper";
+  try{ log(view === "teacher" ? "先生の画面を開いた" : "係の画面を開いた", "", w.email); }catch(err){}
   var t = HtmlService.createTemplateFromFile("Index");
-  t.boot = JSON.stringify({view:view, role:j.role, url:P.url()});
+  t.boot = JSON.stringify({view:view, role:w.role, url:P.url()});
   return t.evaluate()
     .setTitle("宿題チェック")
     .addMetaTag("viewport", "width=device-width, initial-scale=1")

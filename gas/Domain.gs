@@ -76,6 +76,15 @@ var Domain = (function(){
     return "日月火水木金土".charAt(new Date(Date.UTC(p[0], p[1] - 1, p[2])).getUTCDay());
   }
 
+  /* 係の期限の上限。学期の終わり（3月末・8月末・12月末）のうち、
+     date 以上でいちばん近いものを返す。date は "YYYY-MM-DD" */
+  function termEnd(date){
+    var y = Number(date.slice(0, 4));
+    var ends = [y + "-03-31", y + "-08-31", y + "-12-31", (y + 1) + "-03-31"];
+    for(var i = 0; i < ends.length; i++) if(ends[i] >= date) return ends[i];
+    return (y + 1) + "-03-31";
+  }
+
   function toInt(v){
     var s = String(v == null ? "" : v);
     if(s.normalize) s = s.normalize("NFKC");
@@ -281,7 +290,7 @@ var Domain = (function(){
     SLOTS:SLOTS, STATES:STATES, isState:isState, nextState:nextState, counts:counts,
     pad:pad, jstDate:jstDate, jstStamp:jstStamp, jstParts:jstParts,
     stampMinutes:stampMinutes, hhmm:hhmm, isDate:isDate, asDate:asDate, asStamp:asStamp,
-    addDays:addDays, weekday:weekday, toInt:toInt,
+    addDays:addDays, weekday:weekday, toInt:toInt, termEnd:termEnd,
     isExempt:isExempt, finalMarks:finalMarks, dayView:dayView, dayDetail:dayDetail,
     stats:stats, parseRoster:parseRoster
   };

@@ -63,7 +63,7 @@ var P = (function(){
       return h1.toString(16) + h2.toString(16);
     },
     url: function(){ return ""; },
-    who: function(){ return Gate.check(); },
+    who: function(){ return Gate.checkAny(); },
 
     /* 検査とデモのための口。本物の Platform.gs には無い */
     _reset: function(){ db = fresh(); save(); },
@@ -75,5 +75,11 @@ var P = (function(){
 })();
 
 var Gate = (typeof Gate !== "undefined") ? Gate : {
-  check: function(){ return {ok:true, email:"demo@edu.nishi.or.jp", role:"staff"}; }
+  check: function(){ return {ok:true, email:"demo@edu.nishi.or.jp"}; },
+  who: function(){ return {role:"staff", email:"demo@edu.nishi.or.jp", code:""}; },
+  checkAny: function(){ return {role:"staff", email:"demo@edu.nishi.or.jp", code:""}; },
+  norm: function(raw){
+    var e = String(raw == null ? "" : raw);
+    return e.trim().toLowerCase();
+  }
 };

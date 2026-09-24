@@ -2,8 +2,8 @@
    Api.gs — 画面から呼ぶ口（api…）。
 
    ■ 関門はアカウントで分ける（暗証番号は使わない）
-       1. すべての api… は1行目で guard() を呼ぶ。学校のアカウントで、
-          児童なら「せってい」で係に登録した子だけが通る。
+       1. すべての api… は1行目で guard() を呼ぶ。教職員か、「係」シートに
+          入れた児童（期限内）だけが通る（Gate.who）。
        2. 先生の口（名簿・免除・分析など）は teacher() で、教職員の
           アカウントでなければ何も返さない。係の児童が呼べるのは
           apiToday と apiMark（きょうの分だけ）の2つ。
@@ -22,7 +22,8 @@ var TABLES = {
   "欠席":     ["日付", "番号"],
   "免除":     ["開始日", "終了日", "番号", "枠", "メモ"],
   "操作記録": ["時刻", "種類", "内容", "利用者"],
-  "設定":     ["項目", "値"]
+  "設定":     ["項目", "値"],
+  "係":       ["メールアドレス", "いつまで", "メモ"]
 };
 var ICONS = ["book", "calc", "note", "pencil", "paper", "star", "music", "bag", "abc"];
 var ITEM_COLORS = ["blue", "red", "green"];   /* 品目の列の色。名前は係の画面の t-… に対応 */
@@ -38,8 +39,7 @@ var DEFAULT_ROWS = {
     ["提出率の目安（%）", "80"],
     ["続けて出ていない日の目安", "3"],
     ["係の画面に氏名を出す", "出す"],
-    ["集計の開始日", ""],
-    ["係のアカウント", ""]
+    ["集計の開始日", ""]
   ]
 };
 var OP  = {on:"提出", rest:"休み", forgot:"忘れた", doing:"やっている", off:"空白"};
@@ -51,32 +51,12 @@ var OP_R = invert(OP), VIA_R = invert(VIA);
 OP_R["取消"] = "off";
 
 /* ── 関門 ───────────────────────────────── */
-/* 係に登録した児童か。登録は8桁の番号（@ より左）で持つ */
-function isHelper(email){
-  var local = String(email || "").split("@")[0];
-  return /^[0-9]{8}$/.test(local) && readSettings().helpers.indexOf(local) >= 0;
-}
-function guard(){
-  var who = P.who();
-  if(who.role === "helper" && !isHelper(who.email))
-    throw new Error("このアカウントは 係に なっていません。先生に 言ってね。");
-  return who;
-}
+/* 教職員、または「係」シートの児童（期限内）。どちらでもなければ例外 */
+function guard(){ return P.who(); }
 function teacher(){
   var who = guard();
   if(who.role !== "staff") throw new Error("先生のアカウントで開いてください。");
   return who;
-}
-/* 「係のアカウント」の欄に書かれた文字から8桁の番号を拾う（アドレスごと貼っても読む） */
-function parseHelpers(text){
-  var s = String(text || "");
-  if(s.normalize) s = s.normalize("NFKC");
-  var out = [];
-  (s.match(/(^|[^0-9])([0-9]{8})(?![0-9])/g) || []).forEach(function(m){
-    var n = m.replace(/[^0-9]/g, "");
-    if(out.indexOf(n) < 0) out.push(n);
-  });
-  return out;
 }
 
 /* ── 表を読む ─────────────────────────────── */
@@ -141,8 +121,7 @@ function readSettings(){
     ratePct: isFinite(rate) && rate > 0 && rate <= 100 ? rate : 80,
     streakMin: isFinite(streak) && streak >= 1 ? Math.round(streak) : 3,
     showNames: kv["係の画面に氏名を出す"] !== "出さない",
-    from: Domain.asDate(kv["集計の開始日"] || ""),
-    helpers: parseHelpers(kv["係のアカウント"])
+    from: Domain.asDate(kv["集計の開始日"] || "")
   };
 }
 
@@ -307,9 +286,21 @@ function apiSetAbsent(date, nos){
   });
   return apiTeacherDay(date);
 }
+/* 係の画面を開ける児童。いつまでは学期末（3/31・8/31・12/31）が上限。
+   空のまま保存すると学期末の日付が入る（Gate.who と同じ決まり） */
+function readHelpers(){
+  var t = today();
+  return P.rows("係").map(function(r){
+    var e = Gate.norm(r[0]);
+    if(!e || e.indexOf("@") < 0) return null;
+    var until = Domain.asDate(r[1]);
+    return {email:e, until:until, memo:String(r[2] || ""), active: !!(until && t <= until)};
+  }).filter(function(x){ return !!x; });
+}
 function apiSetup(){
   teacher();
   return {roster:readRoster(), slots:readSlots(), exemptions:readExemptions(),
+          helpers:readHelpers(),
           settings:readSettings(), icons:ICONS, url:P.url(), today:today()};
 }
 function apiSaveRoster(list){
@@ -356,6 +347,20 @@ function apiSaveExemptions(list){
   P.lock(function(){ P.replace("免除", rows); });
   return apiSetup();
 }
+function apiSaveHelpers(list){
+  teacher();
+  var seen = {}, rows = [], cap = Domain.termEnd(today());
+  (list || []).slice(0, 100).forEach(function(h){
+    var e = Gate.norm(h && h.email);
+    var at = e.lastIndexOf("@");
+    if(!e || at <= 0 || at === e.length - 1 || /\s/.test(e) || seen[e]) return;
+    seen[e] = true;
+    var u = Domain.asDate(h && h.until);
+    rows.push([e, (u && u < cap) ? u : cap, String(h && h.memo || "").slice(0, 60)]);
+  });
+  P.lock(function(){ P.replace("係", rows); });
+  return apiSetup();
+}
 function apiSaveSettings(s){
   teacher();
   s = s || {};
@@ -364,8 +369,7 @@ function apiSaveSettings(s){
     ["提出率の目安（%）", isFinite(rate) && rate > 0 && rate <= 100 ? Math.round(rate) : 80],
     ["続けて出ていない日の目安", isFinite(streak) && streak >= 1 ? Math.round(streak) : 3],
     ["係の画面に氏名を出す", s.showNames === false ? "出さない" : "出す"],
-    ["集計の開始日", Domain.asDate(s.from || "")],
-    ["係のアカウント", parseHelpers(Array.isArray(s.helpers) ? s.helpers.join(" ") : s.helpers).join(" ")]
+    ["集計の開始日", Domain.asDate(s.from || "")]
   ];
   P.lock(function(){ P.replace("設定", rows); });
   return apiSetup();

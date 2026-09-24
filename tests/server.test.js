@@ -177,14 +177,12 @@ console.log("■ 関門（アカウントで役を分ける）");
   const SEN = "tanaka@edu.nishi.or.jp";
   ok("係に登録していない児童は係の画面も開けない", !!as(KID, () => s.apiToday()));
   ok("教職員ドメインでも8桁の数字は通さない", !!as("12345678@edu.nishi.or.jp", () => s.apiToday()));
-  ok("児童ドメインで8桁でないものは通さない", !!as("abc@kyoiku.edu.nishi.or.jp", () => s.apiToday()));
   ok("メールが取れないと通さない", !!as("", () => s.apiToday()));
   ok("よそのドメインは通さない", !!as("sensei@gmail.com", () => s.apiToday()));
   ok("末尾だけ似たドメインは通さない", !!as("a@xedu.nishi.or.jp", () => s.apiToday()));
   ok("教職員は通る", as(SEN, () => s.apiToday()) === null);
   s.EMAIL = SEN;
-  const se = s.apiSaveSettings({ratePct:80, streakMin:3, showNames:true, from:"", helpers:"12345678@kyoiku.edu.nishi.or.jp\n２３４５６７８９"});
-  ok("係のアカウントはアドレスでも全角でも番号で持つ", se.settings.helpers.join() === "12345678,23456789", se.settings.helpers);
+  s.apiSaveHelpers([{email:KID, until:"", memo:""}]);
   ok("登録した係の児童は係の画面を開ける", as(KID, () => s.apiToday()) === null);
   ok("登録していない児童は開けない", !!as(KID2, () => s.apiToday()));
   ["apiSetup", "apiStats", "apiLogs", "apiTeacherDay"].forEach(f =>
@@ -195,8 +193,64 @@ console.log("■ 関門（アカウントで役を分ける）");
   ok("係の児童の印は「タップ」として残る", s.P.rows("提出記録")[0][6] === "タップ", s.P.rows("提出記録")[0]);
   s.apiMark([{id:"kid-00002", date:"2026-09-24", no:1, slot:1, op:"on", at:T0}]);
   ok("係の児童は前の日を直せない", s.P.rows("提出記録").length === 1);
-  ok("全角の＠でも寄せて比べる", s.Gate.judge("ＴＡＮＡＫＡ＠edu.nishi.or.jp").role === "staff");
-  ok("児童の役", s.Gate.judge(KID).role === "helper");
+  ok("全角の＠でも寄せて比べる", s.Gate.judge("ＴＡＮＡＫＡ＠edu.nishi.or.jp").ok === true);
+  ok("係の児童の役", s.Gate.who().role === "helper");
+}
+
+console.log("■ 係の児童のアカウント（係シート）");
+{
+  const s = load({gate:true});
+  s.P._reset(); s.P._setNow(T0);           /* 日本時間 2026-09-25 → 学期末は 2026-12-31 */
+  s.P.replace("名簿", [[1, "あお"], [2, "いし"]]);
+  s.P.replace("係", [["12345678@kyoiku.edu.nishi.or.jp", "2026-12-31", "テスト係"],
+                     ["87654321@kyoiku.edu.nishi.or.jp", "2026-09-24", "期限切れ"],
+                     ["55555555@kyoiku.edu.nishi.or.jp", "", "期限なし"]]);
+
+  s.EMAIL = "12345678@kyoiku.edu.nishi.or.jp";
+  ok("係リストの児童は helper", s.Gate.who().role === "helper", s.Gate.who());
+  ok("係はきょうの表を見られる", throws(() => s.apiToday()) === null);
+  const hp = s.apiMark([{id:"hp-000001", date:"2026-09-25", no:1, slot:1, op:"on", at:JST("2026-09-25","08:30"), via:"tap"}]);
+  ok("係もタップを書ける", hp.state.cells["1:1"] === "on", hp.state.cells);
+  s.apiMark([{id:"hp-000002", date:"2026-09-24", no:1, slot:1, op:"on", at:JST("2026-09-24","08:30"), via:"tap"}]);
+  ok("きのう分は書けない（本日だけ）", s.P.rows("提出記録").length === 1);
+  ok("先生の口は呼べない", !!throws(() => s.apiSetup()));
+
+  s.EMAIL = "87654321@kyoiku.edu.nishi.or.jp";
+  ok("期限切れの係は入れない", s.Gate.who().role === "none" && !!throws(() => s.apiToday()));
+  s.EMAIL = "55555555@kyoiku.edu.nishi.or.jp";
+  ok("期限の無い行は開けない（閉じる側）", s.Gate.who().role === "none");
+  s.EMAIL = "99999999@kyoiku.edu.nishi.or.jp";
+  ok("リストにない児童は入れない", s.Gate.who().role === "none" && !!throws(() => s.apiToday()));
+  s.EMAIL = "tanaka@edu.nishi.or.jp";
+  ok("先生はそのまま staff", s.Gate.who().role === "staff" && throws(() => s.apiToday()) === null);
+}
+
+console.log("■ 係の期限は学期末が上限");
+{
+  const s = load({gate:true});
+  s.P._reset(); s.P._setNow(T0);
+  s.EMAIL = "tanaka@edu.nishi.or.jp";
+  const r = s.apiSaveHelpers([{email:"12345678@kyoiku.edu.nishi.or.jp", until:"", memo:""},
+                                  {email:"87654321@kyoiku.edu.nishi.or.jp", until:"2026-10-15", memo:""},
+                                  {email:"55555555@kyoiku.edu.nishi.or.jp", until:"2027-06-30", memo:"学期末を越える"},
+                                  {email:"not-an-email", until:"", memo:""}]);
+  ok("空なら学期末（12/31）が入る", r.helpers[0].until === "2026-12-31", r.helpers);
+  ok("早い期限はそのまま", r.helpers[1].until === "2026-10-15");
+  ok("学期末より後は学期末に切る", r.helpers[2].until === "2026-12-31");
+  ok("メールの形でない行は捨てる", r.helpers.length === 3, r.helpers);
+  ok("シートにも同じ期限が書かれる", s.P.rows("係")[0][1] === "2026-12-31", s.P.rows("係"));
+
+  s.EMAIL = "12345678@kyoiku.edu.nishi.or.jp";
+  s.P._setNow(JST("2026-12-31", "20:00"));       /* 日本時間 12/31 */
+  ok("学期末当日は開ける", s.Gate.who().role === "helper");
+  s.P._setNow(JST("2027-01-01", "08:00"));       /* 日本時間 1/1 */
+  ok("学期を越えると失効する", s.Gate.who().role === "none" && !!throws(() => s.apiToday()));
+
+  s.EMAIL = "tanaka@edu.nishi.or.jp";
+  const r2 = s.apiSaveHelpers([{email:"12345678@kyoiku.edu.nishi.or.jp", until:"", memo:""}]);
+  ok("新学期に保存し直すと次の学期末になる", r2.helpers[0].until === "2027-03-31", r2.helpers);
+  s.EMAIL = "12345678@kyoiku.edu.nishi.or.jp";
+  ok("再登録すれば開ける", s.Gate.who().role === "helper");
 }
 
 done();

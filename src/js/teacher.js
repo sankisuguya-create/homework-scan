@@ -4,7 +4,7 @@
      分析       … 提出率・平均提出時刻・続けて出ていない日数
      免除       … 特別な事情のある子を、期間・品目ごとに外す
      名簿と品目 … 名簿の貼り付け、品目の枠（名前・アイコン・いつも出す）
-     せってい   … 分析の目安、係の画面の氏名、係のアカウント、操作記録
+     せってい   … 分析の目安、係の画面の氏名、操作記録
 ================================================================== */
 var Teacher = (function(){
   var root = null, opts = {}, tab = "day", active = false;
@@ -254,12 +254,34 @@ var Teacher = (function(){
             + '<td><input type="checkbox" data-f="daily" style="width:32px;height:32px"' + (s.daily ? " checked" : "") + '></td></tr>';
         }).join("") + '</tbody></table></div>'
       + '<div class="line"><button class="btn primary" data-t="sl-save">' + icon("save") + '品目を 保存</button></div></div>';
+
+    var hp = SU.helpers || [];
+    h += '<div class="sec"><h2>' + icon("hand") + '係の画面を 開ける児童（' + hp.length + '人）</h2>'
+      + '<p class="note">ここに入れた児童は、自分のアドレスで このアプリを開くと 係の画面（きょうの入力）だけが見えます。'
+      + '先生の画面には どの方法でも入れません。期限は学期の終わり（3月・8月・12月）までで、それより後は自動で 切れます。'
+      + 'もっと早くおわらせたいときだけ、日付を入れてください。</p>'
+      + '<div style="overflow-x:auto"><table class="tbl"><thead><tr><th>メールアドレス</th><th>いつまで</th><th>メモ</th><th></th></tr></thead><tbody>'
+      + (hp.length ? hp.map(function(x, i){
+          return '<tr data-hp="' + i + '"' + (x.active ? '' : ' style="opacity:.55"') + '><td><input type="email" data-f="email" value="' + esc(x.email) + '" style="width:22em"></td>'
+            + '<td><input type="date" data-f="until" value="' + esc(x.until) + '"></td>'
+            + '<td><input type="text" data-f="memo" maxlength="60" value="' + esc(x.memo) + '" style="width:14em"></td>'
+            + '<td><button class="btn small" data-t="hp-del" data-i="' + i + '">' + icon("trash") + 'けす</button></td></tr>';
+        }).join("") : '<tr><td colspan="4">まだ ありません</td></tr>')
+      + '</tbody></table></div><div class="line">'
+      + '<button class="btn" data-t="hp-add">' + icon("plus") + '1人 たす</button>'
+      + '<button class="btn primary" data-t="hp-save">' + icon("save") + '係を 保存</button></div></div>';
     return h;
   }
   function readRosterTable(){
     return $$("[data-ro]", root).map(function(tr){
       return {no:Number($('[data-f="no"]', tr).value), name:$('[data-f="name"]', tr).value.trim()};
     });
+  }
+  function readHelpersTable(){
+    return $$("[data-hp]", root).map(function(tr){
+      return {email:$('[data-f="email"]', tr).value.trim(), until:$('[data-f="until"]', tr).value,
+              memo:$('[data-f="memo"]', tr).value.trim()};
+    }).filter(function(h){ return h.email; });
   }
 
   /* ────────── せってい ────────── */
@@ -272,11 +294,6 @@ var Teacher = (function(){
     h += '<div class="sec"><h2>' + icon("users") + '係の画面の 氏名</h2><div class="chips">'
       + '<button class="pick" data-names="1" aria-pressed="' + s.showNames + '">出す</button>'
       + '<button class="pick" data-names="0" aria-pressed="' + !s.showNames + '">出さない（番号だけ）</button></div>'
-      + '<div class="line"><button class="btn primary" data-t="se-save">' + icon("save") + 'せっていを 保存</button></div></div>';
-    h += '<div class="sec"><h2>' + icon("hand") + '係の アカウント</h2>'
-      + '<p class="note">係の児童の アカウント（8けたの 番号）を 入れます。ここに ある子だけが、自分の アカウントで 係の画面を 開けます。'
-      + '先生の画面は 教職員の アカウントでしか 開けません。アドレスごと 貼りつけても 読みます。</p>'
-      + '<textarea id="se-helpers" rows="3" style="width:100%;font-size:20px" placeholder="12345678 23456789">' + esc((s.helpers || []).join("\n")) + '</textarea>'
       + '<div class="line"><button class="btn primary" data-t="se-save">' + icon("save") + 'せっていを 保存</button></div></div>';
     h += '<div class="sec"><h2>' + icon("clock") + '操作記録（新しい順）</h2>'
       + (logs ? (logs.length ? '<div style="overflow-x:auto"><table class="tbl"><thead><tr><th>時刻</th><th>できごと</th><th>アカウント</th></tr></thead><tbody>'
@@ -350,6 +367,9 @@ var Teacher = (function(){
       if(dup.length){ toast(dup[0].no + "番が 2人 います", true); return; }
       return tcall("apiSaveRoster", list).then(function(r){ SU = r; roster = null; D = null; ST = null; show(); toast("名簿を保存しました"); });
     }
+    if(t === "hp-add"){ SU.helpers = readHelpersTable(); SU.helpers.push({email:"", until:"", memo:"", active:true}); return show(); }
+    if(t === "hp-del"){ SU.helpers = readHelpersTable(); SU.helpers.splice(Number(b.getAttribute("data-i")), 1); return show(); }
+    if(t === "hp-save") return tcall("apiSaveHelpers", readHelpersTable()).then(function(r){ SU = r; show(); toast("係を 保存しました"); });
     if(t === "sl-save"){
       var slots = $$("[data-sl]", root).map(function(tr){
         var p = $('[data-icon][aria-pressed="true"]', tr);
@@ -363,8 +383,7 @@ var Teacher = (function(){
     if(t === "se-save"){
       var sn = $('[data-names][aria-pressed="true"]', root);
       return tcall("apiSaveSettings", {ratePct:Number($("#se-rate").value), streakMin:Number($("#se-streak").value),
-                                       from:$("#se-from").value, showNames: !sn || sn.getAttribute("data-names") === "1",
-                                       helpers:$("#se-helpers").value})
+                                       from:$("#se-from").value, showNames: !sn || sn.getAttribute("data-names") === "1"})
         .then(function(r){ SU = r; ST = null; show(); toast("せっていを保存しました"); });
     }
     if(t === "logs") return tcall("apiLogs").then(function(r){ logs = r; show(); });
