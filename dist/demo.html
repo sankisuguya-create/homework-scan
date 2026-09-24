@@ -1600,7 +1600,7 @@ var Teacher = (function(){
           return '<label class="slot' + (on ? " on" : "") + '"><input type="checkbox" data-pslot="' + s.slot + '"' + (on ? " checked" : "") + '>'
             + icon(s.icon) + '<input type="text" maxlength="20" data-pslotname="' + s.slot + '" value="' + esc(onDay[s.slot] || s.name) + '" placeholder="（名前）"></label>';
         }).join("") + '</div>'
-      + '<div class="line"><button class="btn primary" data-t="save-pane" data-pane="' + pane + '">' + icon("save") + label + 'の 宿題を 決める</button>'
+      + '<div class="line"><button class="btn primary" data-t="save-pane" data-saveof="' + pane + '">' + icon("save") + label + 'の 宿題を 決める</button>'
       + '<span class="note">品目を 1つも 付けずに決めると「提出物なし」の日になり、集計に入りません。</span></div></div>';
   }
   /* きょうの未提出者。○でも休でもないマス（免除は除く）が残っている児童 */
@@ -1956,7 +1956,7 @@ var Teacher = (function(){
     if(t === "next") return loadDay(Domain.addDays(D.date, 1));
     if(t === "today") return loadDay("");
     if(t === "save-day") return saveDay();
-    if(t === "save-pane") return savePane(b.getAttribute("data-pane"), b);
+    if(t === "save-pane") return savePane(b.getAttribute("data-saveof"), b);
     if(t === "home-re") return loadHome();
     if(t === "save-abs") return saveAbs();
     if(t === "stats-run") return loadStats($("#st-from").value, $("#st-to").value);
