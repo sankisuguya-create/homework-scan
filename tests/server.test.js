@@ -19,6 +19,14 @@ console.log("■ 日付と時刻（日本時間）");
   ok("閉室の境目 14:00", D.openAt(JST("2026-09-25", "13:59")) === true && D.openAt(JST("2026-09-25", "14:00")) === false);
   ok("猶予ありなら14:10まで", D.openAt(JST("2026-09-25", "14:09"), 10) === true && D.openAt(JST("2026-09-25", "14:10"), 10) === false);
   ok("土日は開かない", D.openAt(JST("2026-09-26", "10:00")) === false && D.openAt(JST("2026-09-26", "10:00"), 10) === false && D.openAt(JST("2026-09-27", "12:00")) === false);
+
+  ok("IP許可: 空なら無制限", D.ipAllowed("1.2.3.4", "") === true && D.ipAllowed("x", "  ") === true);
+  ok("IP許可: 完全一致", D.ipAllowed("203.0.113.5", "203.0.113.5") === true && D.ipAllowed("203.0.113.6", "203.0.113.5") === false);
+  ok("IP許可: CIDR", D.ipAllowed("203.0.113.99", "203.0.113.0/24") === true && D.ipAllowed("203.0.114.1", "203.0.113.0/24") === false);
+  ok("IP許可: 並びと端の範囲", D.ipAllowed("10.0.0.1", "203.0.113.5, 10.0.0.0/8") === true
+     && D.ipAllowed("0.0.0.0", "0.0.0.0/0") === true && D.ipAllowed("9.9.9.9", "10.0.0.0/8, 203.0.113.5") === false);
+  ok("IP許可: 変なIPは合わない", D.ipAllowed("999.1.1.1", "0.0.0.0/0") === false && D.ipAllowed("", "0.0.0.0/0") === false);
+  ok("IP許可: 壊れた範囲は無視", D.ipAllowed("1.2.3.4", "abc, 1.2.3.4/99") === false && D.ipAllowed("1.2.3.4", "abc, 1.2.3.4") === true);
 }
 
 console.log("■ 名簿の貼り付け");
@@ -126,9 +134,11 @@ console.log("■ 先生が品目・名簿・過去の日を直す");
   const sl = s.apiSaveSlots([{slot:1, name:"漢字", icon:"book", daily:true}, {slot:2, name:"", icon:"calc", daily:true}, {slot:3, icon:"evil"}]);
   ok("名前の無い枠は「いつも出す」にしない", sl.slots[1].daily === false && sl.slots[0].daily === true, sl.slots.slice(0, 2));
   ok("知らないアイコンは既定に戻す", sl.slots[2].icon === "note", sl.slots[2]);
-  const se = s.apiSaveSettings({ratePct:70, streakMin:2, showNames:false, from:"2026/9/1"});
-  ok("設定を保存", se.settings.ratePct === 70 && se.settings.streakMin === 2 && se.settings.from === "2026-09-01", se.settings);
+  const se = s.apiSaveSettings({ratePct:70, streakMin:2, showNames:false, from:"2026/9/1", netIps:"203.0.113.0/24, 210.1.2.3"});
+  ok("設定を保存", se.settings.ratePct === 70 && se.settings.streakMin === 2 && se.settings.from === "2026-09-01"
+     && se.settings.netIps === "203.0.113.0/24, 210.1.2.3", se.settings);
   ok("氏名を出さない設定では係の画面に名前が来ない", s.apiToday().roster.every(r => r.name === ""));
+  ok("係の画面に校内のIPの設定が届く", s.apiToday().net === "203.0.113.0/24, 210.1.2.3");
 }
 
 console.log("■ 分析");

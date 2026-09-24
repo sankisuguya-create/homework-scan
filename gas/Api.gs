@@ -39,7 +39,8 @@ var DEFAULT_ROWS = {
     ["提出率の目安（%）", "80"],
     ["続けて出ていない日の目安", "3"],
     ["係の画面に氏名を出す", "出す"],
-    ["集計の開始日", ""]
+    ["集計の開始日", ""],
+    ["校内のIP", ""]
   ]
 };
 var OP  = {on:"提出", rest:"休み", forgot:"忘れた", doing:"やっている", off:"空白"};
@@ -145,7 +146,8 @@ function readSettings(){
     ratePct: isFinite(rate) && rate > 0 && rate <= 100 ? rate : 80,
     streakMin: isFinite(streak) && streak >= 1 ? Math.round(streak) : 3,
     showNames: kv["係の画面に氏名を出す"] !== "出さない",
-    from: Domain.asDate(kv["集計の開始日"] || "")
+    from: Domain.asDate(kv["集計の開始日"] || ""),
+    netIps: kv["校内のIP"] || ""
   };
 }
 
@@ -195,7 +197,7 @@ function helperState(ctx){
   var st = ctx.settings || readSettings();
   return {date:date, wd:Domain.weekday(date), items:items,
           roster: roster.map(function(s){ return {no:s.no, name: st.showNames ? s.name : ""}; }),
-          cells:v.cells, excused:v.excused, now:P.now()};
+          cells:v.cells, excused:v.excused, now:P.now(), net:st.netIps || ""};
 }
 /* 係の画面を使えるのは 8:00〜14:00（日本時間）。閉じている間は closed を返す。
    先生（staff）はいつでも見られる。端末側でも同じ時刻で閉じるので、
@@ -413,7 +415,8 @@ function apiSaveSettings(s){
     ["提出率の目安（%）", isFinite(rate) && rate > 0 && rate <= 100 ? Math.round(rate) : 80],
     ["続けて出ていない日の目安", isFinite(streak) && streak >= 1 ? Math.round(streak) : 3],
     ["係の画面に氏名を出す", s.showNames === false ? "出さない" : "出す"],
-    ["集計の開始日", Domain.asDate(s.from || "")]
+    ["集計の開始日", Domain.asDate(s.from || "")],
+    ["校内のIP", String(s.netIps || "").slice(0, 200)]
   ];
   P.lock(function(){ P.replace("設定", rows); });
   return apiSetup();

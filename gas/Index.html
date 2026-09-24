@@ -278,6 +278,35 @@ var Domain = (function(){
     return m >= OPEN.from && m < OPEN.to + (graceMin || 0);
   }
 
+  /* IPv4 を数値に。読めなければ null（IPv6 はあつかわない） */
+  function ip4num(s){
+    var m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(String(s || "").trim());
+    if(!m) return null;
+    var n = 0;
+    for(var i = 1; i <= 4; i++){ var o = Number(m[i]); if(o > 255) return null; n = n * 256 + o; }
+    return n;
+  }
+  /* "203.0.113.5, 210.1.2.0/24" みたいな許可リスト（カンマ・空白区切り、
+     単体IPとCIDR）に ip が合うか。空のリストは「制限なし」＝ true */
+  function ipAllowed(ip, spec){
+    spec = String(spec || "").trim();
+    if(!spec) return true;
+    var n = ip4num(ip);
+    if(n == null) return false;
+    var ok = false;
+    spec.split(/[\s,;、]+/).forEach(function(t){
+      if(!t || ok) return;
+      var slash = t.indexOf("/");
+      if(slash < 0){ if(ip4num(t) === n) ok = true; return; }
+      var base = ip4num(t.slice(0, slash)), bits = Number(t.slice(slash + 1));
+      if(base == null || !(bits >= 0 && bits <= 32)) return;
+      if(bits === 0){ ok = true; return; }
+      var mask = (0xFFFFFFFF << (32 - bits)) >>> 0;
+      if(((n & mask) >>> 0) === ((base & mask) >>> 0)) ok = true;
+    });
+    return ok;
+  }
+
   /* 係の期限の上限。学期の終わり（3月末・8月末・12月末）のうち、
      date 以上でいちばん近いものを返す。date は "YYYY-MM-DD" */
   function termEnd(date){
@@ -493,7 +522,7 @@ var Domain = (function(){
     pad:pad, jstDate:jstDate, jstStamp:jstStamp, jstParts:jstParts,
     stampMinutes:stampMinutes, hhmm:hhmm, isDate:isDate, asDate:asDate, asStamp:asStamp,
     addDays:addDays, weekday:weekday, toInt:toInt, termEnd:termEnd,
-    OPEN:OPEN, openAt:openAt,
+    OPEN:OPEN, openAt:openAt, ip4num:ip4num, ipAllowed:ipAllowed,
     isExempt:isExempt, finalMarks:finalMarks, dayView:dayView, dayDetail:dayDetail,
     stats:stats, parseRoster:parseRoster
   };
@@ -620,9 +649,10 @@ function toast(msg, ng){
    ■ 免除のマスは ○ と同じ見た目（理由は係に見せない）。タップしても変わらない
    ■ タップした記録は、まずこの端末に貯めてからサーバへ送る。
      つながらなくても印は消えず、つながったときにまとめて送る。
-   ■ 係の画面が使えるのは 8:00〜14:00（日本時間）。その外は「閉室中」。
+   ■ 係の画面が使えるのは平日の 8:00〜14:00（日本時間）。その外は「閉室中」。
      端末の時計で決めるので、オフラインでも 14:00 になれば閉じる。
-     （教職員のアカウント＝先生には関門なし）
+     「校内のIP」がせっていに入っていると、校外のネットワークでは開けない
+     （端末が自分の外IPを調べて、校内のIPと合うか見る。先生には関門なし）
 ================================================================== */
 var MARK = {
   on:     {ch:"○", label:"出した"},
@@ -646,6 +676,8 @@ var Helper = (function(){
   var online = true, busy = false, reqNo = 0, applied = 0, timer = null, backoff = 0;
   var root = null, active = false, n = 0, opts = {};
   var gateT = null, closedServer = false;
+  var netOk = null, netT = null;
+  var NET_PROBE = ["https://api.ipify.org?format=json", "https://icanhazip.com/"];
 
   /* 開いているか＝係の役でなければ常に開放。係なら端末の時計（日本時間）で判断 */
   function openNow(){ return !!opts.staff || Domain.openAt(Date.now()); }
@@ -672,7 +704,7 @@ var Helper = (function(){
     var wait = Math.max(500, nextBoundary() - Date.now());
     gateT = setTimeout(function(){
       closedServer = false;
-      if(openNow()) kick();
+      if(openNow()){ kick(); netCheck(); }
       else { sync().then(render, render); }   /* 14:00 → 残りを送ってから閉じる */
       render();
       gate();
@@ -714,6 +746,7 @@ var Helper = (function(){
         saveQueue();
       }
       if(my > applied){ applied = my; S = st; }
+      if(netRequired() && netOk === null) netCheck();   /* 「校内のIP」が入っていたら確かめる */
       render();
       return r;
     }, function(err){
@@ -733,10 +766,42 @@ var Helper = (function(){
   }
   function schedule(){
     clearTimeout(timer);
-    if(!active || closedNow()) return;   /* 閉室中はサーバを呼ばない */
+    if(!active || closedNow() || netBlocked()) return;   /* 閉室中・校外はサーバを呼ばない */
     timer = setTimeout(function(){ sync().then(schedule, schedule); }, backoff || (queue.length ? 1500 : 15000));
   }
   function kick(){ sync().then(schedule, schedule); }
+
+  /* ── 校内ネットワークの確認（係のみ。「校内のIP」が空なら制限なし） ── */
+  function netRequired(){ return !opts.staff && !!(S && S.net); }
+  function netBlocked(){ return netRequired() && netOk === false; }
+  function probeIp(i){
+    return fetch(NET_PROBE[i], {cache:"no-store"}).then(function(r){ return r.text(); }).then(function(t){
+      var m = /\d{1,3}(?:\.\d{1,3}){3}/.exec(t);
+      if(!m) throw new Error("no ip");
+      return m[0];
+    });
+  }
+  function netCheck(){
+    if(!active || opts.staff) return;
+    clearTimeout(netT);
+    if(!netRequired()){ netOk = null; }
+    else if(!closedNow()){
+      probeIp(0).catch(function(){ return probeIp(1); }).then(function(ip){
+        var was = netOk;
+        netOk = Domain.ipAllowed(ip, S.net);
+        if(netOk === false && was !== false) sync().then(render, render); /* 残りを送ってから閉じる */
+        if(netOk === true && was === false) kick();
+        render();
+      }, function(){
+        /* どの窓口にも届かない＝確かめられないので閉じる（切れていても同じ見え方） */
+        var was = netOk;
+        netOk = false;
+        if(was !== false) sync().then(render, render);
+        render();
+      });
+    }
+    netT = setTimeout(netCheck, netOk === false ? 45000 : 600000);   /* 外では45秒ごとに確かめ直す */
+  }
 
   function mark(no, slot, state){
     queue.push({id: device() + "-" + Date.now().toString(36) + "-" + (++n), date:S.date, no:no, slot:slot,
@@ -844,6 +909,7 @@ var Helper = (function(){
   function render(){
     if(!root || !active) return;
     if(closedNow()){ root.innerHTML = closedHtml(); return; }
+    if(netBlocked()){ root.innerHTML = offnetHtml(); return; }
     if(!S){ root.innerHTML = '<div class="helper"><div class="none">' + icon("sync") + 'よみこみ中…</div></div>'; return; }
     var cells = view();
     var net = online
@@ -871,8 +937,14 @@ var Helper = (function(){
     root.innerHTML = '<div class="helper">' + head + body + '</div>';
   }
 
-  function mount(el, o){ root = el; opts = o || {}; active = true; closedServer = false; render(); kick(); gate(); }
-  function unmount(){ active = false; clearTimeout(timer); clearTimeout(gateT); }
+  function offnetHtml(){
+    return '<div class="helper"><div class="closed"><div class="mark">閉室中</div>'
+      + '<p class="msg">がっこうの ネットワークから ひらいてください</p>'
+      + '<p class="sub">つかえるのは 校内（edu-net）からだけ</p></div></div>';
+  }
+
+  function mount(el, o){ root = el; opts = o || {}; active = true; closedServer = false; netOk = null; render(); kick(); gate(); netCheck(); }
+  function unmount(){ active = false; clearTimeout(timer); clearTimeout(gateT); clearTimeout(netT); }
 
   document.addEventListener("click", function(e){
     if(!active || !root || !root.contains(e.target)) return;
@@ -880,7 +952,7 @@ var Helper = (function(){
     onTap(e);
   });
   document.addEventListener("visibilitychange", function(){ if(active && !document.hidden) kick(); });
-  window.addEventListener("online", function(){ if(active) kick(); });
+  window.addEventListener("online", function(){ if(active){ kick(); netCheck(); } });
 
   return {mount:mount, unmount:unmount, refresh:kick, pending:function(){ return queue.length; }};
 })();
@@ -1211,6 +1283,10 @@ var Teacher = (function(){
       + '<label class="field">提出率（%）が これより低いと 印<input type="number" id="se-rate" min="1" max="100" value="' + s.ratePct + '" style="width:7em"></label>'
       + '<label class="field">続けて 未提出の 日数が これ以上で 印<input type="number" id="se-streak" min="1" max="30" value="' + s.streakMin + '" style="width:7em"></label>'
       + '<label class="field">集計の 開始日<input type="date" id="se-from" value="' + esc(s.from) + '"></label></div></div>';
+    h += '<div class="sec"><h2>' + icon("shield") + '係の画面を ひらける ネットワーク</h2>'
+      + '<div class="line"><label class="field">校内の IP<input id="se-net" value="' + esc(s.netIps || "") + '" placeholder="例 203.0.113.5, 203.0.113.0/24" style="width:22em"></label></div>'
+      + '<p class="sub">空なら どこからでも 開けます。入れると 係の画面は この IP（edu-net）の中からしか 開けません。'
+      + 'カンマで いくつか 並べられ、範囲は /24 などで 書けます。校内で 調べた 外向きの IP を入れてください</p></div>';
     h += '<div class="sec"><h2>' + icon("users") + '係の画面の 氏名</h2><div class="chips">'
       + '<button class="pick" data-names="1" aria-pressed="' + s.showNames + '">出す</button>'
       + '<button class="pick" data-names="0" aria-pressed="' + !s.showNames + '">出さない（番号だけ）</button></div>'
@@ -1303,7 +1379,8 @@ var Teacher = (function(){
     if(t === "se-save"){
       var sn = $('[data-names][aria-pressed="true"]', root);
       return tcall("apiSaveSettings", {ratePct:Number($("#se-rate").value), streakMin:Number($("#se-streak").value),
-                                       from:$("#se-from").value, showNames: !sn || sn.getAttribute("data-names") === "1"})
+                                       from:$("#se-from").value, showNames: !sn || sn.getAttribute("data-names") === "1",
+                                       netIps:$("#se-net").value.trim()})
         .then(function(r){ SU = r; ST = null; show(); toast("せっていを保存しました"); });
     }
     if(t === "logs") return tcall("apiLogs").then(function(r){ logs = r; show(); });
