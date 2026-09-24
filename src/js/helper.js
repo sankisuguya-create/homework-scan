@@ -189,7 +189,7 @@ var Helper = (function(){
     var head = '<div class="hbar"><div class="date">' + esc(dateLabel(S.date, S.wd)) + '</div>'
       + '<div class="title">' + icon("check") + 'しゅくだい チェック</div><div class="grow"></div>'
       + (S.roster.length && S.items.length ? legend() : '') + net
-      + '<button class="btn tbtn" data-act="teacher">' + icon("lock") + '先生</button></div>';
+      + (BOOT.role === "helper" ? '' : '<button class="btn tbtn" data-act="teacher">' + icon("lock") + '先生</button>') + '</div>';
 
     var body;
     if(!S.roster.length){
