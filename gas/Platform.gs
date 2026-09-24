@@ -55,6 +55,14 @@ var P = (function(){
       return out;
     }));
   }
+  /* データ行 i（0 起き＝シートの i+2 行目）をまるごと書きかえる */
+  function put(name, i, row){
+    var sh = sheet(name), w = width(name), out = [];
+    for(var k = 0; k < w; k++) out.push(row[k] == null ? "" : String(row[k]));
+    var rng = sh.getRange(i + 2, 1, 1, w);
+    rng.setNumberFormat("@");
+    rng.setValues([out]);
+  }
   function replace(name, list){
     var sh = sheet(name), w = width(name), last = sh.getLastRow();
     if(last > 1) sh.getRange(2, 1, last - 1, w).clearContent();
@@ -83,7 +91,7 @@ var P = (function(){
   }
   function url(){ try{ return ScriptApp.getService().getUrl() || ""; }catch(err){ return ""; } }
 
-  return {rows:rows, tail:tail, append:append, replace:replace,
+  return {rows:rows, tail:tail, append:append, replace:replace, put:put,
           prop:prop, setProp:setProp, cacheGet:cacheGet, cachePut:cachePut, cacheDel:cacheDel,
           lock:lock, now:now, uuid:uuid, hash:hash, url:url,
           who:function(){ return Gate.checkAny(); }};

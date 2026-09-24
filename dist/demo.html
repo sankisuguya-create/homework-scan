@@ -122,6 +122,12 @@ button{cursor:pointer;touch-action:manipulation}
 .none p{font-size:24px;margin:0}
 .none .ic{width:96px;height:96px}
 
+/* 係の画面の閉室中（8:00〜14:00 以外） */
+.closed{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;text-align:center}
+.closed .mark{font-size:64px;font-weight:800;letter-spacing:.1em;padding:20px 48px;border:6px solid var(--ink);border-radius:var(--r);background:var(--soft)}
+.closed .msg{font-size:28px;font-weight:700;margin:0}
+.closed .sub{font-size:20px;color:var(--sub);margin:0}
+
 /* ================= 先生の画面 ================= */
 .teacher{min-height:100vh;display:flex;flex-direction:column}
 .tbar{display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:var(--line);flex-wrap:wrap;position:sticky;top:0;background:var(--paper);z-index:5}
@@ -197,8 +203,8 @@ var BOOT = {view: /teacher/.test(location.hash) ? "teacher" : "helper", url: "",
 
    ■ 1マスの状態（係がタップするたびに次へ進む）
        空白 → ○提出(on) → 休(rest) → 忘(forgot) → △やっている(doing) → 空白
-       「その日・その子・その枠」の記録を時刻順に並べ、**最後の操作**がそのマスの状態。
-       記録は消さずに足すだけ。空白に戻すのも「空白(off)」という記録を足す。
+       「記録」シートに1日×児童ごとの1行があり、マスのセルは
+       **最後の操作**で書きかわる（消えてから足すのではなく上書き）。
        集計では ○ と 休 を「提出」、忘・△・空白を「未提出」として数える。
 ================================================================== */
 var Domain = (function(){
@@ -258,6 +264,18 @@ var Domain = (function(){
   function weekday(date){
     var p = date.split("-").map(Number);
     return "日月火水木金土".charAt(new Date(Date.UTC(p[0], p[1] - 1, p[2])).getUTCDay());
+  }
+
+  /* 係の画面を使える時間（日本時間）。平日の 8:00 から 14:00 まで。
+     土曜・日曜は終日「閉室中」。係の児童はこの間だけ見られる・書ける。
+     先生（教職員）はいつでも。
+     graceMin は「閉まってからも少しの間は受ける」幅（分）。 */
+  var OPEN = {from:8 * 60, to:14 * 60};
+  function openAt(ms, graceMin){
+    var p = jstParts(ms);
+    if(p.wd === 0 || p.wd === 6) return false;
+    var m = p.h * 60 + p.mi;
+    return m >= OPEN.from && m < OPEN.to + (graceMin || 0);
   }
 
   /* 係の期限の上限。学期の終わり（3月末・8月末・12月末）のうち、
@@ -475,6 +493,7 @@ var Domain = (function(){
     pad:pad, jstDate:jstDate, jstStamp:jstStamp, jstParts:jstParts,
     stampMinutes:stampMinutes, hhmm:hhmm, isDate:isDate, asDate:asDate, asStamp:asStamp,
     addDays:addDays, weekday:weekday, toInt:toInt, termEnd:termEnd,
+    OPEN:OPEN, openAt:openAt,
     isExempt:isExempt, finalMarks:finalMarks, dayView:dayView, dayDetail:dayDetail,
     stats:stats, parseRoster:parseRoster
   };
@@ -501,7 +520,7 @@ var TABLES = {
   "名簿":     ["番号", "氏名"],
   "品目":     ["枠", "名前", "アイコン", "いつも出す", "色"],
   "日の品目": ["日付", "枠", "名前"],
-  "提出記録": ["記録ID", "日付", "番号", "枠", "操作", "時刻", "入力", "端末", "受信"],
+  "記録":     ["日付", "番号", "枠1", "枠2", "枠3", "枠4", "枠5", "枠6", "枠7", "枠8", "枠9"],
   "欠席":     ["日付", "番号"],
   "免除":     ["開始日", "終了日", "番号", "枠", "メモ"],
   "操作記録": ["時刻", "種類", "内容", "利用者"],
@@ -527,11 +546,11 @@ var DEFAULT_ROWS = {
 };
 var OP  = {on:"提出", rest:"休み", forgot:"忘れた", doing:"やっている", off:"空白"};
 var VIA = {tap:"タップ", teacher:"先生"};
-var TAIL = 5000;
+var GLYPH = {on:"○", rest:"休", forgot:"忘", doing:"△", off:"消"};
+var MARK_GRACE = 10;   /* 14:00 の閉室を過ぎても、少し前に押した分を受ける幅（分） */
 
 function invert(o){ var r = {}; Object.keys(o).forEach(function(k){ r[o[k]] = k; }); return r; }
-var OP_R = invert(OP), VIA_R = invert(VIA);
-OP_R["取消"] = "off";
+var GLYPH_R = invert(GLYPH);
 
 /* ── 関門 ───────────────────────────────── */
 /* 教職員、または「係」シートの児童（期限内）。どちらでもなければ例外 */
@@ -578,13 +597,37 @@ function readDays(){
   Object.keys(days).forEach(function(d){ days[d].sort(function(a, b){ return a.slot - b.slot; }); });
   return days;
 }
-function toEvent(r, i){
-  return {id:String(r[0]), date:Domain.asDate(r[1]), no:Domain.toInt(r[2]), slot:Domain.toInt(r[3]),
-          op:OP_R[String(r[4])] || "", at:Domain.asStamp(r[5]), via:VIA_R[String(r[6])] || "tap", seq:i};
+/* ── 「記録」の行 ───────────────────────────
+   1日×児童ごとの1行：日付,番号,枠1…枠9。セルは「いまの状態」で上書きする。
+   セルの文字："○ 8:12"「△」「忘」「*忘」（先頭の * は先生の印）、
+   "消" は空白に戻した印（欠席の「休」より強い）。 */ 
+function recCellParse(v){
+  var m = /^(\*)?([○休忘△消])(?:\s+(\d{1,2}):(\d{2}))?$/.exec(String(v == null ? "" : v).trim());
+  if(!m || !GLYPH_R[m[2]]) return null;
+  return {op:GLYPH_R[m[2]], via:m[1] ? "teacher" : "tap",
+          hm:m[3] == null ? null : Number(m[3]) * 60 + Number(m[4])};
 }
-function readEvents(all){
-  var rows = all ? P.rows("提出記録") : P.tail("提出記録", TAIL);
-  return rows.map(toEvent).filter(function(e){ return e.date && e.no && e.slot && e.op; });
+function recCellText(op, via, atMs){
+  var s = (via === "teacher" ? "*" : "") + GLYPH[op];
+  if(atMs != null){ var p = Domain.jstParts(atMs); s += " " + p.h + ":" + Domain.pad(p.mi); }
+  return s;
+}
+/* 「記録」の行を記録の並び（events）に直す。
+   セル1つが記録1つ（セルは最後の状態を持つので並び替えは要らない）。 */
+function readEvents(){
+  var evs = [];
+  P.rows("記録").forEach(function(r, i){
+    var date = Domain.asDate(r[0]), no = Domain.toInt(r[1]);
+    if(!date || !no) return;
+    for(var s = 1; s <= Domain.SLOTS; s++){
+      var c = recCellParse(r[1 + s]);
+      if(!c) continue;
+      evs.push({id:"rec-" + i + "-" + s, date:date, no:no, slot:s, op:c.op,
+                at:c.hm == null ? "" : date + " " + Domain.hhmm(c.hm) + ":00",
+                via:c.via, seq:i});
+    }
+  });
+  return evs;
 }
 function readAbsences(){
   return P.rows("欠席").map(function(r){ return {date:Domain.asDate(r[0]), no:Domain.toInt(r[1])}; })
@@ -648,7 +691,7 @@ function helperState(ctx){
   var days = ctx.days || readDays(), slots = ctx.slots || readSlots();
   var items = itemsFor(date, days, slots).items;
   var roster = ctx.roster || readRoster();
-  var events = ctx.events || readEvents(false);
+  var events = ctx.events || readEvents();
   var v = Domain.dayView({date:date, items:items, roster:roster, events:events,
                           absences:readAbsences(), exemptions:readExemptions()});
   var st = ctx.settings || readSettings();
@@ -656,42 +699,54 @@ function helperState(ctx){
           roster: roster.map(function(s){ return {no:s.no, name: st.showNames ? s.name : ""}; }),
           cells:v.cells, excused:v.excused, now:P.now()};
 }
+/* 係の画面を使えるのは 8:00〜14:00（日本時間）。閉じている間は closed を返す。
+   先生（staff）はいつでも見られる。端末側でも同じ時刻で閉じるので、
+   オフラインでも「閉室中」にかわる。 */ 
 function apiToday(){
-  guard();
+  var who = guard();
+  if(who.role === "helper" && !Domain.openAt(P.now())) return {closed:true};
   return helperState();
 }
 
 /* マスの状態を変える。events は端末に貯めた分をまとめて送ってくる。
    op は「この状態にする」（on/rest/forgot/doing/off）。「次へ進める」ではないので、
    送り直しても、2台が同じマスを押しても、状態がとびとびに進んでしまうことはない。
-   同じ記録IDは2度書かない（通信が切れて送り直しても重ならない）。
-   sentAt は端末が送った時の端末の時計。サーバの時計との差で、各記録の時刻を直す
-   （端末の時計がずれていても、2台の印の前後が入れかわらない）。
-   きょう以外の日を直すのは先生（教職員のアカウント）だけ。過ぎた日の直しはその日の
-   23:59:59 に置き、その日のどの記録よりも後（＝いまの状態）にする。 */
+   「記録」の「日付×番号」の行にある枠のセルを上書きする（行がなければ足す）。
+   複数の PC が並行して押してもロックして順に処理するので、あとから届いた入力が
+   そのマスの状態になる（あと入力が優先）。同じ記録を送り直しても同じ状態が
+   上書きされるだけなので増えない。
+   sentAt は端末が送った時の端末の時計。サーバの時計との差で、記録に残す時刻を直す
+   （端末の時計がずれていても、押した時刻が大きくずれて残らない）。
+   係が書けるのは開いている時間（8:00〜14:00＋10分の猶予）できょうの分だけ。
+   きょう以外の日を直すのは先生（教職員のアカウント）だけ。 */
 function apiMark(events, sentAt){
   var who = guard();
   var isTeacher = who.role === "staff";
-  var now = P.now(), date0 = today(), recv = Domain.jstStamp(now);
+  var now = P.now(), date0 = today();
+  var list = Array.isArray(events) ? events.slice(0, 500) : [];
+  var processed = [];
+  list.forEach(function(e){
+    if(e && typeof e === "object" && /^[\w-]{6,40}$/.test(String(e.id || "")))
+      processed.push(String(e.id));
+  });
+  if(!isTeacher && !Domain.openAt(now, MARK_GRACE)) return {closed:true, processed:processed};
   var skew = Number(sentAt);
   skew = isFinite(skew) && sentAt !== null && sentAt !== "" ? now - skew : 0;
   if(Math.abs(skew) > 8 * 86400000) skew = 0;
   var rosterList = readRoster(), roster = {};
   rosterList.forEach(function(s){ roster[s.no] = true; });
   var slots = readSlots(), settings = readSettings();
-  var list = Array.isArray(events) ? events.slice(0, 500) : [];
-  var processed = [], rows = [], tailRows = [], days = null;
+  var days = null;
   P.lock(function(){
     days = readDays();
-    tailRows = P.tail("提出記録", TAIL);
-    var seen = {};
-    tailRows.forEach(function(r){ seen[String(r[0])] = true; });
+    var recs = P.rows("記録");
+    var recIdx = {};
+    recs.forEach(function(r, i){ recIdx[Domain.asDate(r[0]) + "|" + Domain.toInt(r[1])] = i; });
+    var dirty = {}, fresh = [];
     list.forEach(function(e){
       if(!e || typeof e !== "object") return;
       var id = String(e.id || "");
       if(!/^[\w-]{6,40}$/.test(id)) return;
-      processed.push(id);
-      if(seen[id]) return;
       var date = Domain.asDate(e.date);
       if(!date || date > date0 || date < Domain.addDays(date0, -7)) return;
       if(date !== date0 && !isTeacher) return;
@@ -705,16 +760,24 @@ function apiMark(events, sentAt){
       var at = Number(e.at) + skew;
       if(!isFinite(at) || at > now + 5 * 60000 || at < now - 8 * 86400000) at = now;
       if(date === date0) ensureDay(date, days, slots);
-      var stamp = date === date0 ? Domain.jstStamp(at) : date + " 23:59:59";
-      seen[id] = true;
-      rows.push([id, date, no, slot, OP[e.op], stamp, VIA[via],
-                 String(e.dev || "").slice(0, 20), recv]);
+      var key = date + "|" + no, idx = recIdx[key], row, added = false;
+      if(idx == null){
+        row = [date, String(no), "", "", "", "", "", "", "", "", ""];
+        idx = recs.push(row) - 1; recIdx[key] = idx; fresh.push(row); added = true;
+      }else{
+        row = recs[idx];
+      }
+      var cell = recCellText(e.op, via, date === date0 ? at : null);
+      if(row[1 + slot] !== cell){
+        row[1 + slot] = cell;
+        if(!added) dirty[idx] = true;
+      }
     });
-    P.append("提出記録", rows);
+    Object.keys(dirty).forEach(function(i){ P.put("記録", Number(i), recs[i]); });
+    P.append("記録", fresh);
   });
-  var evs = tailRows.concat(rows).map(toEvent).filter(function(e){ return e.date && e.no && e.slot && e.op; });
   return {processed:processed,
-          state:helperState({days:days, slots:slots, roster:rosterList, events:evs, settings:settings})};
+          state:helperState({days:days, slots:slots, roster:rosterList, settings:settings})};
 }
 
 function log(kind, detail, email){
@@ -731,7 +794,7 @@ function apiTeacherDay(date){
   var items = f.draft && date !== d0 ? [] : f.items;
   var roster = readRoster(), absences = readAbsences();
   var cells = Domain.dayDetail({date:date, items:items, roster:roster,
-                                events:readEvents(date < Domain.addDays(d0, -14)),
+                                events:readEvents(),
                                 absences:absences, exemptions:readExemptions()});
   return {date:date, wd:Domain.weekday(date), today:d0, hasDay: !f.draft,
           items:items, slots:readSlots(), roster:roster, cells:cells,
@@ -864,7 +927,7 @@ function apiStats(from, to){
   var st = readSettings(), d0 = today();
   from = Domain.asDate(from) || st.from || "";
   to = Domain.asDate(to) || Domain.addDays(d0, -1);
-  var r = Domain.stats({days:readDays(), roster:readRoster(), events:readEvents(true),
+  var r = Domain.stats({days:readDays(), roster:readRoster(), events:readEvents(),
                         absences:readAbsences(), exemptions:readExemptions(),
                         from:from, to:to, rateMin: st.ratePct / 100, streakMin: st.streakMin});
   r.from = from; r.to = to;
@@ -917,6 +980,7 @@ var P = (function(){
     tail: function(n, c){ var t = table(n); return copy(t.slice(Math.max(0, t.length - c))); },
     append: function(n, list){ var t = table(n); list.forEach(function(r){ t.push(norm(n, r)); }); save(); },
     replace: function(n, list){ db.tables[n] = list.map(function(r){ return norm(n, r); }); save(); },
+    put: function(n, i, r){ db.tables[n][i] = norm(n, r); save(); },
     prop: function(k){ return db.props[k] == null ? null : db.props[k]; },
     setProp: function(k, v){ db.props[k] = String(v); save(); },
     cacheGet: function(k){
@@ -966,7 +1030,7 @@ var Gate = (typeof Gate !== "undefined") ? Gate : {
 </script>
 <script>
 /* デモ版の初期データ。名前は架空。
-   過去2週間ぶんの提出記録を作って、分析の画面に中身が出るようにする。 */
+   過去2週間ぶんの「記録」行を作って、分析の画面に中身が出るようにする。 */
 function demoSeed(){
   if(!P._empty()) return;
   var names = ["あおき はると", "いしかわ めい", "うえだ そうた", "えんどう ゆい", "おおの れん",
@@ -981,7 +1045,7 @@ function demoSeed(){
   var seed = 7;
   function rnd(){ seed = (seed * 1103515245 + 12345) % 2147483648; return seed / 2147483648; }
   var today = Domain.jstDate(P.now());
-  var days = [], ev = [], abs = [];
+  var days = [], recs = [], abs = [];
   var d = today, n = 0;
   while(days.length < 10 && n < 30){
     d = Domain.addDays(d, -1); n++;
@@ -997,24 +1061,26 @@ function demoSeed(){
       var no = i + 1;
       if(no === 12 && di === 6){ abs.push([date, no]); return; }
       var weak = no === 7 || no === 23;
+      var row = [date, String(no), "", "", "", "", "", "", "", "", ""], wrote = false;
       items.forEach(function(it){
         if(no === 15 && it[0] === 2) return;
         var p = weak ? 0.55 : 0.96;
         if(no === 29 && di >= 6) p = 0;
         var base = weak ? 8 * 60 + 25 : 8 * 60 + 5;
         var m = Math.round(base + rnd() * 20 - 5);
-        var stamp = date + " 0" + Math.floor(m / 60) + ":" + Domain.pad(m % 60) + ":00";
-        var op = "提出";
+        var hm = "0" + Math.floor(m / 60) + ":" + Domain.pad(m % 60);
+        var cell = "○ " + hm;
         if(rnd() > p){
           var r = rnd();
-          if(r < 0.2) return;
-          op = r < 0.75 ? "忘れた" : "やっている";
+          if(r < 0.2) return;                     /* 空白（押されなかった） */
+          cell = (r < 0.75 ? "忘 " : "△ ") + hm;
         }
-        ev.push(["seed-" + date + "-" + no + "-" + it[0], date, no, it[0], op, stamp, "タップ", "demo", stamp]);
+        row[1 + it[0]] = cell; wrote = true;
       });
+      if(wrote) recs.push(row);
     });
   });
-  P.append("提出記録", ev);
+  P.append("記録", recs);
   P.append("欠席", abs);
   P.append("免除", [[days[0], "", 15, 2, "計算ドリルは別の課題"]]);
   P.replace("設定", DEFAULT_ROWS["設定"].map(function(r){ return r.slice(); }).map(function(r){
@@ -1178,6 +1244,9 @@ function toast(msg, ng){
    ■ 免除のマスは ○ と同じ見た目（理由は係に見せない）。タップしても変わらない
    ■ タップした記録は、まずこの端末に貯めてからサーバへ送る。
      つながらなくても印は消えず、つながったときにまとめて送る。
+   ■ 係の画面が使えるのは 8:00〜14:00（日本時間）。その外は「閉室中」。
+     端末の時計で決めるので、オフラインでも 14:00 になれば閉じる。
+     （教職員のアカウント＝先生には関門なし）
 ================================================================== */
 var MARK = {
   on:     {ch:"○", label:"出した"},
@@ -1200,6 +1269,39 @@ var Helper = (function(){
   var queue = loadQueue();
   var online = true, busy = false, reqNo = 0, applied = 0, timer = null, backoff = 0;
   var root = null, active = false, n = 0, opts = {};
+  var gateT = null, closedServer = false;
+
+  /* 開いているか＝係の役でなければ常に開放。係なら端末の時計（日本時間）で判断 */
+  function openNow(){ return !!opts.staff || Domain.openAt(Date.now()); }
+  function closedNow(){ return !openNow() || closedServer; }
+  /* 次に開閉が切りかわる時刻（端末の時計の ms で返す） */
+  function nextBoundary(){
+    var now = Date.now();
+    var p = Domain.jstParts(now);
+    var today0 = now - (p.h * 3600 + p.mi * 60 + p.s) * 1000;
+    var m = p.h * 60 + p.mi + p.s / 60;
+    if(p.wd !== 0 && p.wd !== 6){
+      if(m < Domain.OPEN.from) return today0 + Domain.OPEN.from * 60000;   /* けさの 8:00 */
+      if(m < Domain.OPEN.to)   return today0 + Domain.OPEN.to * 60000;     /* きょうの 14:00 */
+    }
+    /* あす以降で最初の平日の 8:00 */
+    var t = today0, wd = p.wd;
+    do{ t += 86400000; wd = (wd + 1) % 7; }while(wd === 0 || wd === 6);
+    return t + Domain.OPEN.from * 60000;
+  }
+  /* 境目で閉じる・開ける。14:00 では、たまっている分を先に送ってから閉室中にする */
+  function gate(){
+    clearTimeout(gateT);
+    if(!active || opts.staff) return;
+    var wait = Math.max(500, nextBoundary() - Date.now());
+    gateT = setTimeout(function(){
+      closedServer = false;
+      if(openNow()) kick();
+      else { sync().then(render, render); }   /* 14:00 → 残りを送ってから閉じる */
+      render();
+      gate();
+    }, Math.min(wait, 86400000));
+  }
 
   function device(){
     try{
@@ -1228,6 +1330,7 @@ var Helper = (function(){
     var my = ++reqNo;
     return call.apply(null, [name].concat(args || [])).then(function(r){
       online = true; backoff = 0;
+      if(r && r.closed) closedServer = true;
       var st = r && r.state ? r.state : r;
       if(r && r.processed){
         var p = {}; r.processed.forEach(function(id){ p[id] = true; });
@@ -1254,7 +1357,7 @@ var Helper = (function(){
   }
   function schedule(){
     clearTimeout(timer);
-    if(!active) return;
+    if(!active || closedNow()) return;   /* 閉室中はサーバを呼ばない */
     timer = setTimeout(function(){ sync().then(schedule, schedule); }, backoff || (queue.length ? 1500 : 15000));
   }
   function kick(){ sync().then(schedule, schedule); }
@@ -1351,8 +1454,20 @@ var Helper = (function(){
         }).join('<span class="arr">→</span>') + '</div>';
   }
 
+  function closedHtml(){
+    var p = Domain.jstParts(Date.now());
+    var wknd = p.wd === 0 || p.wd === 6;
+    var before = p.h * 60 + p.mi < Domain.OPEN.from;
+    var msg = wknd ? 'きょうは おやすみです'
+      : before ? 'あけるのは 8:00 からです'
+      : 'きょうの うけつけは おわりました';
+    return '<div class="helper"><div class="closed"><div class="mark">閉室中</div>'
+      + '<p class="msg">' + msg + '</p>'
+      + '<p class="sub">つかえるのは 平日 8:00〜14:00</p></div></div>';
+  }
   function render(){
     if(!root || !active) return;
+    if(closedNow()){ root.innerHTML = closedHtml(); return; }
     if(!S){ root.innerHTML = '<div class="helper"><div class="none">' + icon("sync") + 'よみこみ中…</div></div>'; return; }
     var cells = view();
     var net = online
@@ -1380,8 +1495,8 @@ var Helper = (function(){
     root.innerHTML = '<div class="helper">' + head + body + '</div>';
   }
 
-  function mount(el, o){ root = el; opts = o || {}; active = true; render(); kick(); }
-  function unmount(){ active = false; clearTimeout(timer); }
+  function mount(el, o){ root = el; opts = o || {}; active = true; closedServer = false; render(); kick(); gate(); }
+  function unmount(){ active = false; clearTimeout(timer); clearTimeout(gateT); }
 
   document.addEventListener("click", function(e){
     if(!active || !root || !root.contains(e.target)) return;
@@ -1660,7 +1775,7 @@ var Teacher = (function(){
             + '<td><button class="btn small" data-t="ro-del" data-i="' + i + '">' + icon("trash") + 'けす</button></td></tr>';
         }).join("") : '<tr><td colspan="3">まだ ありません</td></tr>')
       + '</tbody></table></div>'
-      + '<div class="sec" style="flex:1;min-width:300px"><label class="field">' + icon("paste") + ' スプレッドシートから 貼りつける（番号と氏名の2列）'
+      + '<div class="sec" style="flex:1;min-width:300px"><label class="field">' + icon("paste") + ' 元の名簿から 範囲コピーして 貼りつける（行の数字が番号、はじめの文字の列が氏名。余分な列は 読み飛ばします）'
       + '<textarea id="ro-paste" placeholder="1&#9;あおき はると&#10;2&#9;いしかわ めい"></textarea></label>'
       + '<div class="line"><button class="btn" data-t="ro-read">' + icon("paste") + '貼りつけた名簿を 読む</button></div></div></div>'
       + '<div class="line"><button class="btn" data-t="ro-add">' + icon("plus") + '1人 たす</button>'
