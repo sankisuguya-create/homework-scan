@@ -86,7 +86,7 @@ var P = (function(){
   return {rows:rows, tail:tail, append:append, replace:replace,
           prop:prop, setProp:setProp, cacheGet:cacheGet, cachePut:cachePut, cacheDel:cacheDel,
           lock:lock, now:now, uuid:uuid, hash:hash, url:url,
-          email:function(){ return Gate.check().email; }};
+          who:function(){ return Gate.checkAny(); }};
 })();
 
 /* 最初に1回、Apps Script エディタから実行する。表を全部作る。 */
@@ -105,8 +105,9 @@ function doGet(e){
   if(w.role === "none") return Gate.denyPage(w);
   var q = (e && e.parameter) || {};
   var view = (w.role === "staff" && q.view === "teacher") ? "teacher" : "helper";
+  try{ log(view === "teacher" ? "先生の画面を開いた" : "係の画面を開いた", "", w.email); }catch(err){}
   var t = HtmlService.createTemplateFromFile("Index");
-  t.boot = JSON.stringify({view:view, url:P.url(), role:w.role});
+  t.boot = JSON.stringify({view:view, role:w.role, url:P.url()});
   return t.evaluate()
     .setTitle("宿題チェック")
     .addMetaTag("viewport", "width=device-width, initial-scale=1")

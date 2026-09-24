@@ -1,4 +1,4 @@
-/* デモ版の初期データ。名前は架空。暗証番号は 1234。
+/* デモ版の初期データ。名前は架空。
    過去2週間ぶんの提出記録を作って、分析の画面に中身が出るようにする。 */
 function demoSeed(){
   if(!P._empty()) return;
@@ -10,8 +10,6 @@ function demoSeed(){
     "ふじい しょう", "ほんだ まな", "まつもと だいち", "みやざき えま", "むらかみ はる",
     "もりた あんな", "やまだ ゆうま", "よしだ かのん"];
   P.replace("名簿", names.map(function(n, i){ return [i + 1, n]; }));
-  P.setProp("PIN_SALT", "demo");
-  P.setProp("PIN_HASH", P.hash("demo:1234"));
 
   var seed = 7;
   function rnd(){ seed = (seed * 1103515245 + 12345) % 2147483648; return seed / 2147483648; }

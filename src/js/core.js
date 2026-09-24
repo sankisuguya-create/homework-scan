@@ -1,4 +1,4 @@
-/* 共通の道具：サーバ呼び出し・文字の逃がし・音・トースト・暗証番号の token */
+/* 共通の道具：サーバ呼び出し・文字の逃がし・音・トースト */
 
 function call(name){
   var args = Array.prototype.slice.call(arguments, 1);
@@ -7,10 +7,8 @@ function call(name){
     r[name].apply(r, args);
   });
 }
-function isLocked(err){ return /LOCKED/.test(String(err && err.message || err)); }
 function errText(err){
   var m = String(err && err.message || err || "");
-  if(/LOCKED/.test(m)) return "もう一度、暗証番号を入れてください。";
   if(/network|NetworkError|Failed to fetch|通信/i.test(m)) return "つながりませんでした。少しして、もう一度ためしてください。";
   return m.replace(/^Error:\s*/, "").slice(0, 120) || "うまくいきませんでした。";
 }
@@ -58,14 +56,3 @@ function toast(msg, ng){
   document.body.appendChild(t);
   setTimeout(function(){ t.remove(); }, ng ? 5000 : 2200);
 }
-
-var Token = {
-  KEY: "homework-scan/token",
-  get: function(){ try{ return sessionStorage.getItem(this.KEY) || ""; }catch(e){ return this._m || ""; } },
-  set: function(t){ this._m = t; try{ sessionStorage.setItem(this.KEY, t); }catch(e){} },
-  clear: function(){
-    var t = this.get();
-    this._m = ""; try{ sessionStorage.removeItem(this.KEY); }catch(e){}
-    if(t) call("apiLock", t).catch(function(){});
-  }
-};

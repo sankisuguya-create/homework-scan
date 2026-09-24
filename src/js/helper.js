@@ -27,7 +27,7 @@ var Helper = (function(){
   var S = null;          /* サーバから来た当日の状態 */
   var queue = loadQueue();
   var online = true, busy = false, reqNo = 0, applied = 0, timer = null, backoff = 0;
-  var root = null, active = false, n = 0;
+  var root = null, active = false, n = 0, opts = {};
 
   function device(){
     try{
@@ -76,7 +76,7 @@ var Helper = (function(){
   function sync(){
     if(busy) return Promise.resolve();
     busy = true;
-    var p = queue.length ? request("apiMark", [queue.slice(0, 200)]) : request("apiToday");
+    var p = queue.length ? request("apiMark", [queue.slice(0, 200), Date.now()]) : request("apiToday");
     return p.then(function(){ busy = false; if(queue.length) return sync(); },
                   function(){ busy = false; });
   }
@@ -189,7 +189,7 @@ var Helper = (function(){
     var head = '<div class="hbar"><div class="date">' + esc(dateLabel(S.date, S.wd)) + '</div>'
       + '<div class="title">' + icon("check") + 'しゅくだい チェック</div><div class="grow"></div>'
       + (S.roster.length && S.items.length ? legend() : '') + net
-      + (BOOT.role === "helper" ? '' : '<button class="btn tbtn" data-act="teacher">' + icon("lock") + '先生</button>') + '</div>';
+      + (opts.staff ? '<button class="btn tbtn" data-act="teacher">' + icon("gear") + '先生の画面</button>' : '') + '</div>';
 
     var body;
     if(!S.roster.length){
@@ -208,12 +208,12 @@ var Helper = (function(){
     root.innerHTML = '<div class="helper">' + head + body + '</div>';
   }
 
-  function mount(el){ root = el; active = true; render(); kick(); }
+  function mount(el, o){ root = el; opts = o || {}; active = true; render(); kick(); }
   function unmount(){ active = false; clearTimeout(timer); }
 
   document.addEventListener("click", function(e){
     if(!active || !root || !root.contains(e.target)) return;
-    if(e.target.closest("[data-act=teacher]")){ Guard.teacherMenu(); return; }
+    if(e.target.closest("[data-act=teacher]")){ if(opts.openTeacher) opts.openTeacher(); return; }
     onTap(e);
   });
   document.addEventListener("visibilitychange", function(){ if(active && !document.hidden) kick(); });
