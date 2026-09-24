@@ -38,6 +38,10 @@ console.log("■ 名簿の貼り付け");
   ok("番号が無ければ 1 から振る", r2.map(x => x.no).join() === "1,2,3", r2);
   const r3 = D.parseRoster("1,青木\n1,石川\n2,上田");
   ok("同じ番号は先の1人だけ", r3.length === 2 && r3[0].name === "青木", r3);
+  const r4 = D.parseRoster("番号\t氏名\t組\n1\t青木\t3組\n2\t石川\t3組");
+  ok("見出しに余分列があっても捨てる", r4.length === 2 && r4[0].name === "青木" && r4[1].name === "石川", r4);
+  const r5 = D.parseRoster("氏名\tふりがな\n青木\tあおき\n石川\tいしかわ");
+  ok("番号の列が無い見出しも捨てて連番", r5.length === 2 && r5[0].no === 1 && r5[1].no === 2, r5);
 }
 
 function fresh(){

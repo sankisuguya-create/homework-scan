@@ -305,13 +305,16 @@ var Domain = (function(){
       var cells = line.split(line.indexOf("\t") >= 0 ? "\t" : ",").map(function(c){
         c = c.trim(); return c.normalize ? c.normalize("NFKC") : c;
       });
-      var no = null, name = "";
+      var no = null, name = "", hasHead = false;
       cells.forEach(function(c){
         if(!c) return;
         var n = toInt(c);
         if(n != null){ if(no == null) no = n; }
-        else if(!name && !HEAD.test(c)) name = c.replace(/\s+/g, " ");
+        else if(HEAD.test(c)) hasHead = true;
+        else if(!name) name = c.replace(/\s+/g, " ");
       });
+      /* 見出しの字を含むのに番号の無い行は見出し行（「番号 氏名 組」など）と見て捨てる */
+      if(no == null && hasHead) return;
       if(name) rows.push({no:no, name:name});
     });
     var numbered = rows.filter(function(r){ return r.no != null && r.no > 0; }).length;
