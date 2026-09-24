@@ -145,6 +145,10 @@ button{cursor:pointer;touch-action:manipulation}
 .pick{min-width:64px;min-height:52px;border:var(--thin);border-radius:var(--r);background:var(--paper);font-weight:800;font-size:20px;display:inline-flex;align-items:center;gap:6px;padding:4px 12px}
 .pick[aria-pressed="true"]{background:var(--ink);color:var(--paper)}
 .pick .ic{width:24px;height:24px}
+.fold>summary{cursor:pointer;font-weight:800;font-size:22px;display:inline-flex;align-items:center;gap:8px;border:var(--thin);border-radius:var(--r);padding:10px 14px;min-height:52px;list-style:none;width:max-content}
+.fold>summary::-webkit-details-marker{display:none}
+.fold>summary .ic{width:26px;height:26px}
+.fold[open]>summary{margin-bottom:10px}
 .field{display:flex;flex-direction:column;gap:4px;font-weight:700;font-size:18px}
 .field input,.field select,.tbl input,.tbl select{border:var(--thin);border-radius:6px;padding:8px 10px;font-size:20px;background:var(--paper);min-height:48px}
 textarea{border:var(--thin);border-radius:6px;padding:10px;font-size:18px;width:100%;min-height:150px}
