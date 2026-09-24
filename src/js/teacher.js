@@ -138,6 +138,12 @@ var Teacher = (function(){
 
   /* ────────── 分析 ────────── */
   function pct(x){ return x == null ? "―" : Math.round(x * 100) + "%"; }
+  function meanOf(a){ return a.length ? a.reduce(function(x, y){ return x + y; }, 0) / a.length : null; }
+  function medianOf(a){
+    if(!a.length) return null;
+    var s = a.slice().sort(function(x, y){ return x - y; }), i = Math.floor(s.length / 2);
+    return s.length % 2 ? s[i] : (s[i - 1] + s[i]) / 2;
+  }
   function statsHtml(){
     var list = ST.students.slice();
     if(sortBy === "rate") list.sort(function(a, b){ return (a.rate == null ? 2 : a.rate) - (b.rate == null ? 2 : b.rate) || a.no - b.no; });
@@ -150,6 +156,24 @@ var Teacher = (function(){
       + '<button class="btn primary" data-t="stats-run">' + icon("chart") + '集計する</button></div>'
       + '<p class="note">数えた日：' + ST.dates.length + '日。○と休を「提出」、忘・△・空白を「未提出」として数えます。免除のマスは数えません。'
       + '平均・中央値は、係がタップした○の時刻だけから出します。</p></div>';
+
+    /* みんなのまとめ：絶対値（数えた回数）と代表値（平均・中央値）を並べる */
+    var rates = ST.students.filter(function(s){ return s.rate != null; }).map(function(s){ return s.rate; });
+    var avgs = ST.students.map(function(s){ return s.avgMin; }).filter(function(v){ return v != null; });
+    var meds = ST.students.map(function(s){ return s.medMin; }).filter(function(v){ return v != null; });
+    var tot = {req:0, sub:0, rest:0, forgot:0, doing:0};
+    ST.students.forEach(function(s){ tot.req += s.required; tot.sub += s.submitted;
+      tot.rest += s.rest; tot.forgot += s.forgot; tot.doing += s.doing; });
+    var topForgot = ST.students.reduce(function(m, s){ return s.forgot > (m ? m.forgot : -1) ? s : m; }, null);
+    h += '<div class="sec"><h2>' + icon("chart") + 'みんなの まとめ（この期間）</h2><div class="line" style="flex-wrap:wrap">'
+      + '<span class="pick" style="cursor:default"><b>提出率</b>　平均 ' + pct(meanOf(rates)) + '　中央値 ' + pct(medianOf(rates)) + '</span>'
+      + '<span class="pick" style="cursor:default"><b>提出時刻</b>　平均 ' + (meanOf(avgs) == null ? "―" : Domain.hhmm(meanOf(avgs)))
+      + '　中央値 ' + (medianOf(meds) == null ? "―" : Domain.hhmm(medianOf(meds))) + '</span>'
+      + '<span class="pick" style="cursor:default"><b>忘れた回数</b>　合計 ' + tot.forgot + '　1人平均 '
+      + (ST.students.length ? (tot.forgot / ST.students.length).toFixed(1) : "0")
+      + (topForgot && topForgot.forgot ? '　最大 ' + topForgot.forgot + '（' + topForgot.no + '番）' : '') + '</span>'
+      + '<span class="pick" style="cursor:default"><b>内わけ</b>　提出 ' + tot.sub + ' / ' + tot.req + '　休 ' + tot.rest
+      + '　忘 ' + tot.forgot + '　△ ' + tot.doing + '</span></div></div>';
 
     h += '<div class="sec"><h2>' + icon("flag") + '気になる子（提出率 ' + Math.round(ST.rateMin * 100) + '% 未満、または ' + ST.streakMin + '日 以上 続けて未提出）</h2>'
       + (flagged.length ? '<div class="chips">' + flagged.map(function(s){
@@ -180,10 +204,20 @@ var Teacher = (function(){
           return '<tr' + (s.flag ? ' class="flag"' : '') + '><td class="num">' + s.no + '</td><td>'
             + (s.flag ? '<span class="mk flag">' + icon("flag") + '</span> ' : '') + esc(s.name) + '</td>'
             + '<td>' + bar + '</td><td class="num">' + s.submitted + '/' + s.required + '</td>'
-            + '<td class="num">' + s.rest + '</td><td class="num">' + s.forgot + '</td><td class="num">' + s.doing + '</td>'
+            + '<td class="num">' + s.rest + '</td><td class="num">' + s.forgot + (s.forgot ? '/' + s.required : '') + '</td><td class="num">' + s.doing + '</td>'
             + '<td class="num">' + (s.avg || "―") + '</td><td class="num">' + (s.med || "―") + '</td>'
             + '<td class="num">' + (s.streak ? s.streak + "日" : "0") + '</td><td>' + per + '</td></tr>';
-        }).join("") + '</tbody></table></div></div>';
+        }).join("") + '</tbody>'
+      /* 合計行：絶対値の合計と、全体の提出率 */
+      + '<tfoot><tr style="font-weight:700;border-top:2px solid var(--ink)"><td class="num">計</td><td>全員</td>'
+      + '<td>' + (tot.req ? pct(tot.sub / tot.req) : "―") + '</td><td class="num">' + tot.sub + '/' + tot.req + '</td>'
+      + '<td class="num">' + tot.rest + '</td><td class="num">' + tot.forgot + '</td><td class="num">' + tot.doing + '</td>'
+      + '<td class="num">―</td><td class="num">―</td><td class="num">―</td><td>'
+      + ST.itemNames.map(function(n){
+          var sub = 0, req = 0;
+          ST.students.forEach(function(s){ if(s.perItem[n]){ sub += s.perItem[n].sub; req += s.perItem[n].req; } });
+          return esc(n) + ' ' + sub + '/' + req;
+        }).join("　") + '</td></tr></tfoot></table></div></div>';
     return h;
   }
 
