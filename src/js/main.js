@@ -1,20 +1,16 @@
-/* 入口。?view=teacher なら先生の画面（暗証番号から）、ほかは係の画面の入口 */
+/* 入口。役（BOOT.role）はサーバがアカウントから決める。
+     係の児童（helper）… 係の画面だけ
+     教職員（staff）   … 係の画面と先生の画面。?view=teacher なら先生の画面から */
 (function(){
   var app = document.getElementById("app");
+  var staff = BOOT.role === "staff";
 
-  function teacherPage(){
-    app.innerHTML = '<div class="start"><h1>' + icon("lock") + '先生の画面</h1>'
-      + '<button class="btn big primary" data-main="pin">' + icon("unlock") + '暗証番号を 入れる</button></div>';
-    askPin().then(function(tok){
-      if(!tok) return;
-      Teacher.mount(app, {standalone:true, page:true, backLabel:"しめる",
-                          back:function(){ Token.clear(); teacherPage(); }});
-    });
+  function helper(){ Teacher.unmount(); Helper.mount(app, {staff:staff, openTeacher:teacher}); }
+  function teacher(){
+    Helper.unmount();
+    Teacher.mount(app, {back:helper, backLabel:"係の画面へ"});
   }
-  document.addEventListener("click", function(e){
-    if(e.target.closest("[data-main=pin]")) teacherPage();
-  });
 
-  if(BOOT.view === "teacher") teacherPage();
-  else Guard.init(app);
+  if(staff && BOOT.view === "teacher") teacher();
+  else helper();
 })();

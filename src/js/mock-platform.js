@@ -63,7 +63,7 @@ var P = (function(){
       return h1.toString(16) + h2.toString(16);
     },
     url: function(){ return ""; },
-    email: function(){ return Gate.check().email; },
+    who: function(){ return Gate.check(); },
 
     /* 検査とデモのための口。本物の Platform.gs には無い */
     _reset: function(){ db = fresh(); save(); },
@@ -75,5 +75,5 @@ var P = (function(){
 })();
 
 var Gate = (typeof Gate !== "undefined") ? Gate : {
-  check: function(){ return {ok:true, email:"demo@edu.nishi.or.jp"}; }
+  check: function(){ return {ok:true, email:"demo@edu.nishi.or.jp", role:"staff"}; }
 };

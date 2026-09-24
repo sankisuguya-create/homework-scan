@@ -1,10 +1,10 @@
 /* ==================================================================
-   先生の画面。暗証番号で得た token がある間だけ開く。
+   先生の画面。教職員のアカウントで開いたときだけ出す（サーバも teacher() で確かめる）。
      きょうの表 … その日の提出物を決める・欠席・マスを直す（前の7日まで）
      分析       … 提出率・平均提出時刻・続けて出ていない日数
      免除       … 特別な事情のある子を、期間・品目ごとに外す
      名簿と品目 … 名簿の貼り付け、品目の枠（名前・アイコン・いつも出す）
-     せってい   … 分析の目安、係の画面の氏名、暗証番号、操作記録
+     せってい   … 分析の目安、係の画面の氏名、係のアカウント、操作記録
 ================================================================== */
 var Teacher = (function(){
   var root = null, opts = {}, tab = "day", active = false;
@@ -12,25 +12,9 @@ var Teacher = (function(){
   var TABS = [["day", "calendar", "きょうの表"], ["stats", "chart", "分析"], ["exempt", "shield", "免除"],
               ["roster", "users", "名簿と品目"], ["settings", "gear", "せってい"]];
 
-  /* token が切れていたら暗証番号を聞き直して、1回だけやり直す */
+  /* サーバを呼び、失敗したら知らせる */
   function tcall(name){
-    return retry(name, [Token.get].concat(Array.prototype.slice.call(arguments, 1)));
-  }
-  /* args の中の Token.get は、呼ぶたびにいまの token に置き換える */
-  function retry(name, args){
-    function go(){
-      return call.apply(null, [name].concat(args.map(function(a){ return a === Token.get ? Token.get() : a; })));
-    }
-    return go().catch(function(err){
-      if(!isLocked(err)) throw err;
-      return askPin({cancelLabel:"とじる"}).then(function(tok){
-        if(!tok){ back(); throw new Error("LOCKED"); }
-        return go();
-      });
-    }).catch(function(err){
-      if(!isLocked(err)) toast(errText(err), true);
-      throw err;
-    });
+    return call.apply(null, arguments).catch(function(err){ toast(errText(err), true); throw err; });
   }
 
   function back(){ if(opts.back) opts.back(); }
@@ -42,7 +26,7 @@ var Teacher = (function(){
     }).join("");
     root.innerHTML = '<div class="teacher">'
       + '<div class="tbar"><h1>' + icon("unlock") + '先生の画面</h1><div class="grow"></div>'
-      + '<button class="btn" data-t="back">' + icon(opts.page ? "lock" : "back") + esc(opts.backLabel || "もどる") + '</button></div>'
+      + '<button class="btn" data-t="back">' + icon("back") + esc(opts.backLabel || "もどる") + '</button></div>'
       + '<div class="tabs" role="tablist">' + t + '</div>'
       + '<div class="tbody">' + body + '</div></div>';
   }
@@ -83,7 +67,7 @@ var Teacher = (function(){
       + '</div></div>';
 
     h += '<div class="sec"><h2>' + icon("paper") + 'この日の 提出物</h2>'
-      + (D.hasDay ? '' : '<p class="note">この日は まだ 集計に入っていません（係の画面を開かなかった日）。決めると 集計に入ります。</p>')
+      + (D.hasDay ? '' : '<p class="note">この日は まだ 集計に入っていません（まだ 印が 付いていない日）。決めると 集計に入ります。</p>')
       + '<p class="note">チェックを付けた品目が、この日の表に並びます。名前はこの日だけ変えられます（ふだんの名前は「名簿と品目」で）。</p>'
       + '<div class="slots">' + D.slots.map(function(s){
           var on = s.slot in onDay;
@@ -148,7 +132,7 @@ var Teacher = (function(){
               op: next || "off", at:Date.now(), via:"teacher"};
     D.cells[k] = {state:next, via:"teacher", at:"", exempt:false};
     show();
-    retry("apiMark", [[ev], Token.get]).then(function(){ ST = null; return tcall("apiTeacherDay", D.date); })
+    tcall("apiMark", [ev], Date.now()).then(function(){ ST = null; return tcall("apiTeacherDay", D.date); })
       .then(function(r){ D = r; if(tab === "day") show(); }, function(){ loadDay(D.date); });
   }
 
@@ -289,10 +273,11 @@ var Teacher = (function(){
       + '<button class="pick" data-names="1" aria-pressed="' + s.showNames + '">出す</button>'
       + '<button class="pick" data-names="0" aria-pressed="' + !s.showNames + '">出さない（番号だけ）</button></div>'
       + '<div class="line"><button class="btn primary" data-t="se-save">' + icon("save") + 'せっていを 保存</button></div></div>';
-    h += '<div class="sec"><h2>' + icon("lock") + '暗証番号を 変える</h2><div class="line">'
-      + '<label class="field">新しい番号（4〜8けた）<input type="password" inputmode="numeric" id="pin1" maxlength="8" autocomplete="new-password"></label>'
-      + '<label class="field">もう一度<input type="password" inputmode="numeric" id="pin2" maxlength="8" autocomplete="new-password"></label>'
-      + '<button class="btn" data-t="pin-save">' + icon("shield") + '変える</button></div></div>';
+    h += '<div class="sec"><h2>' + icon("hand") + '係の アカウント</h2>'
+      + '<p class="note">係の児童の アカウント（8けたの 番号）を 入れます。ここに ある子だけが、自分の アカウントで 係の画面を 開けます。'
+      + '先生の画面は 教職員の アカウントでしか 開けません。アドレスごと 貼りつけても 読みます。</p>'
+      + '<textarea id="se-helpers" rows="3" style="width:100%;font-size:20px" placeholder="12345678 23456789">' + esc((s.helpers || []).join("\n")) + '</textarea>'
+      + '<div class="line"><button class="btn primary" data-t="se-save">' + icon("save") + 'せっていを 保存</button></div></div>';
     h += '<div class="sec"><h2>' + icon("clock") + '操作記録（新しい順）</h2>'
       + (logs ? (logs.length ? '<div style="overflow-x:auto"><table class="tbl"><thead><tr><th>時刻</th><th>できごと</th><th>アカウント</th></tr></thead><tbody>'
           + logs.map(function(l){ return '<tr><td>' + esc(l.at) + '</td><td>' + esc(l.kind) + (l.detail ? " " + esc(l.detail) : "") + '</td><td>' + esc(l.who) + '</td></tr>'; }).join("")
@@ -378,14 +363,9 @@ var Teacher = (function(){
     if(t === "se-save"){
       var sn = $('[data-names][aria-pressed="true"]', root);
       return tcall("apiSaveSettings", {ratePct:Number($("#se-rate").value), streakMin:Number($("#se-streak").value),
-                                       from:$("#se-from").value, showNames: !sn || sn.getAttribute("data-names") === "1"})
+                                       from:$("#se-from").value, showNames: !sn || sn.getAttribute("data-names") === "1",
+                                       helpers:$("#se-helpers").value})
         .then(function(r){ SU = r; ST = null; show(); toast("せっていを保存しました"); });
-    }
-    if(t === "pin-save"){
-      var p1 = $("#pin1").value, p2 = $("#pin2").value;
-      if(!/^\d{4,8}$/.test(p1)){ toast("4〜8けたの 数字に してください", true); return; }
-      if(p1 !== p2){ toast("2回の 番号が ちがいます", true); return; }
-      return tcall("apiSetPin", p1).then(function(r){ Token.set(r.token); $("#pin1").value = $("#pin2").value = ""; toast("暗証番号を変えました"); });
     }
     if(t === "logs") return tcall("apiLogs").then(function(r){ logs = r; show(); });
   }
@@ -404,6 +384,5 @@ var Teacher = (function(){
   }
   function unmount(){ active = false; }
 
-  return {mount:mount, unmount:unmount, back:back,
-          isStandalone:function(){ return !!(active && opts.standalone); }};
+  return {mount:mount, unmount:unmount, back:back};
 })();

@@ -86,7 +86,7 @@ var P = (function(){
   return {rows:rows, tail:tail, append:append, replace:replace,
           prop:prop, setProp:setProp, cacheGet:cacheGet, cachePut:cachePut, cacheDel:cacheDel,
           lock:lock, now:now, uuid:uuid, hash:hash, url:url,
-          email:function(){ return Gate.check().email; }};
+          who:function(){ return Gate.check(); }};
 })();
 
 /* 最初に1回、Apps Script エディタから実行する。表を全部作る。 */
@@ -102,11 +102,13 @@ function setupSheets(){
 ------------------------------------------------------------------ */
 function doGet(e){
   var j = Gate.judge(Gate.activeEmail());
+  if(j.ok && j.role === "helper" && !isHelper(j.email)) j = {ok:false, code:"not-helper", email:j.email};
   if(!j.ok) return Gate.denyPage(j);
   var q = (e && e.parameter) || {};
-  var view = q.view === "teacher" ? "teacher" : "helper";
+  var view = j.role === "staff" && q.view === "teacher" ? "teacher" : "helper";
+  try{ log(view === "teacher" ? "先生の画面を開いた" : "係の画面を開いた", "", j.email); }catch(err){}
   var t = HtmlService.createTemplateFromFile("Index");
-  t.boot = JSON.stringify({view:view, url:P.url()});
+  t.boot = JSON.stringify({view:view, role:j.role, url:P.url()});
   return t.evaluate()
     .setTitle("宿題チェック")
     .addMetaTag("viewport", "width=device-width, initial-scale=1")

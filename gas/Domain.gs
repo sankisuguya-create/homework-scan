@@ -168,7 +168,8 @@ var Domain = (function(){
   /* ── 集計 ─────────────────────────────────
      days: {"2026-09-23":[{slot,name}], …}  提出物が1つ以上ある日だけが数える日
      返すのは児童ごとの
-       required  出すべき数（免除を除く。休みの日も数える）
+       required  出すべき数（免除と、先生が欠席にした日を除く。
+                 係が「休」を付けたマスは数え、提出として扱う）
        submitted 提出として数えた数（○と休）
        rest / forgot / doing  休・忘・△ の数
        rate      submitted / required（required が 0 なら null）
@@ -203,6 +204,7 @@ var Domain = (function(){
         opts.days[d].forEach(function(it){
           if(isExempt(opts.exemptions, d, st.no, it.slot)) return;
           var m = cellState(marksByDate[d], absByDate[d], st.no, it.slot);
+          if(m && m.via === "absent") return;   /* 欠席の日は出すべき数に入れない */
           var s = m ? m.state : "";
           dayReq++; req++;
           if(!perItem[it.name]){ perItem[it.name] = {req:0, sub:0}; if(itemNames.indexOf(it.name) < 0) itemNames.push(it.name); }
