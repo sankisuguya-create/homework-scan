@@ -6,9 +6,10 @@
    ■ 免除のマスは ○ と同じ見た目（理由は係に見せない）。タップしても変わらない
    ■ タップした記録は、まずこの端末に貯めてからサーバへ送る。
      つながらなくても印は消えず、つながったときにまとめて送る。
-   ■ 係の画面が使えるのは 8:00〜14:00（日本時間）。その外は「閉室中」。
+   ■ 係の画面が使えるのは平日の 8:00〜14:00（日本時間）。その外は「閉室中」。
      端末の時計で決めるので、オフラインでも 14:00 になれば閉じる。
-     （教職員のアカウント＝先生には関門なし）
+     「校内のIP」がせっていに入っていると、校外のネットワークでは開けない
+     （端末が自分の外IPを調べて、校内のIPと合うか見る。先生には関門なし）
 ================================================================== */
 var MARK = {
   on:     {ch:"○", label:"出した"},
@@ -32,6 +33,8 @@ var Helper = (function(){
   var online = true, busy = false, reqNo = 0, applied = 0, timer = null, backoff = 0;
   var root = null, active = false, n = 0, opts = {};
   var gateT = null, closedServer = false;
+  var netOk = null, netT = null;
+  var NET_PROBE = ["https://api.ipify.org?format=json", "https://icanhazip.com/"];
 
   /* 開いているか＝係の役でなければ常に開放。係なら端末の時計（日本時間）で判断 */
   function openNow(){ return !!opts.staff || Domain.openAt(Date.now()); }
@@ -58,7 +61,7 @@ var Helper = (function(){
     var wait = Math.max(500, nextBoundary() - Date.now());
     gateT = setTimeout(function(){
       closedServer = false;
-      if(openNow()) kick();
+      if(openNow()){ kick(); netCheck(); }
       else { sync().then(render, render); }   /* 14:00 → 残りを送ってから閉じる */
       render();
       gate();
@@ -100,6 +103,7 @@ var Helper = (function(){
         saveQueue();
       }
       if(my > applied){ applied = my; S = st; }
+      if(netRequired() && netOk === null) netCheck();   /* 「校内のIP」が入っていたら確かめる */
       render();
       return r;
     }, function(err){
@@ -119,10 +123,42 @@ var Helper = (function(){
   }
   function schedule(){
     clearTimeout(timer);
-    if(!active || closedNow()) return;   /* 閉室中はサーバを呼ばない */
+    if(!active || closedNow() || netBlocked()) return;   /* 閉室中・校外はサーバを呼ばない */
     timer = setTimeout(function(){ sync().then(schedule, schedule); }, backoff || (queue.length ? 1500 : 15000));
   }
   function kick(){ sync().then(schedule, schedule); }
+
+  /* ── 校内ネットワークの確認（係のみ。「校内のIP」が空なら制限なし） ── */
+  function netRequired(){ return !opts.staff && !!(S && S.net); }
+  function netBlocked(){ return netRequired() && netOk === false; }
+  function probeIp(i){
+    return fetch(NET_PROBE[i], {cache:"no-store"}).then(function(r){ return r.text(); }).then(function(t){
+      var m = /\d{1,3}(?:\.\d{1,3}){3}/.exec(t);
+      if(!m) throw new Error("no ip");
+      return m[0];
+    });
+  }
+  function netCheck(){
+    if(!active || opts.staff) return;
+    clearTimeout(netT);
+    if(!netRequired()){ netOk = null; }
+    else if(!closedNow()){
+      probeIp(0).catch(function(){ return probeIp(1); }).then(function(ip){
+        var was = netOk;
+        netOk = Domain.ipAllowed(ip, S.net);
+        if(netOk === false && was !== false) sync().then(render, render); /* 残りを送ってから閉じる */
+        if(netOk === true && was === false) kick();
+        render();
+      }, function(){
+        /* どの窓口にも届かない＝確かめられないので閉じる（切れていても同じ見え方） */
+        var was = netOk;
+        netOk = false;
+        if(was !== false) sync().then(render, render);
+        render();
+      });
+    }
+    netT = setTimeout(netCheck, netOk === false ? 45000 : 600000);   /* 外では45秒ごとに確かめ直す */
+  }
 
   function mark(no, slot, state){
     queue.push({id: device() + "-" + Date.now().toString(36) + "-" + (++n), date:S.date, no:no, slot:slot,
@@ -230,6 +266,7 @@ var Helper = (function(){
   function render(){
     if(!root || !active) return;
     if(closedNow()){ root.innerHTML = closedHtml(); return; }
+    if(netBlocked()){ root.innerHTML = offnetHtml(); return; }
     if(!S){ root.innerHTML = '<div class="helper"><div class="none">' + icon("sync") + 'よみこみ中…</div></div>'; return; }
     var cells = view();
     var net = online
@@ -257,8 +294,14 @@ var Helper = (function(){
     root.innerHTML = '<div class="helper">' + head + body + '</div>';
   }
 
-  function mount(el, o){ root = el; opts = o || {}; active = true; closedServer = false; render(); kick(); gate(); }
-  function unmount(){ active = false; clearTimeout(timer); clearTimeout(gateT); }
+  function offnetHtml(){
+    return '<div class="helper"><div class="closed"><div class="mark">閉室中</div>'
+      + '<p class="msg">がっこうの ネットワークから ひらいてください</p>'
+      + '<p class="sub">つかえるのは 校内（edu-net）からだけ</p></div></div>';
+  }
+
+  function mount(el, o){ root = el; opts = o || {}; active = true; closedServer = false; netOk = null; render(); kick(); gate(); netCheck(); }
+  function unmount(){ active = false; clearTimeout(timer); clearTimeout(gateT); clearTimeout(netT); }
 
   document.addEventListener("click", function(e){
     if(!active || !root || !root.contains(e.target)) return;
@@ -266,7 +309,7 @@ var Helper = (function(){
     onTap(e);
   });
   document.addEventListener("visibilitychange", function(){ if(active && !document.hidden) kick(); });
-  window.addEventListener("online", function(){ if(active) kick(); });
+  window.addEventListener("online", function(){ if(active){ kick(); netCheck(); } });
 
   return {mount:mount, unmount:unmount, refresh:kick, pending:function(){ return queue.length; }};
 })();

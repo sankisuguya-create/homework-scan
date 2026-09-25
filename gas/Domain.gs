@@ -88,6 +88,35 @@ var Domain = (function(){
     return m >= OPEN.from && m < OPEN.to + (graceMin || 0);
   }
 
+  /* IPv4 を数値に。読めなければ null（IPv6 はあつかわない） */
+  function ip4num(s){
+    var m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(String(s || "").trim());
+    if(!m) return null;
+    var n = 0;
+    for(var i = 1; i <= 4; i++){ var o = Number(m[i]); if(o > 255) return null; n = n * 256 + o; }
+    return n;
+  }
+  /* "203.0.113.5, 210.1.2.0/24" みたいな許可リスト（カンマ・空白区切り、
+     単体IPとCIDR）に ip が合うか。空のリストは「制限なし」＝ true */
+  function ipAllowed(ip, spec){
+    spec = String(spec || "").trim();
+    if(!spec) return true;
+    var n = ip4num(ip);
+    if(n == null) return false;
+    var ok = false;
+    spec.split(/[\s,;、]+/).forEach(function(t){
+      if(!t || ok) return;
+      var slash = t.indexOf("/");
+      if(slash < 0){ if(ip4num(t) === n) ok = true; return; }
+      var base = ip4num(t.slice(0, slash)), bits = Number(t.slice(slash + 1));
+      if(base == null || !(bits >= 0 && bits <= 32)) return;
+      if(bits === 0){ ok = true; return; }
+      var mask = (0xFFFFFFFF << (32 - bits)) >>> 0;
+      if(((n & mask) >>> 0) === ((base & mask) >>> 0)) ok = true;
+    });
+    return ok;
+  }
+
   /* 係の期限の上限。学期の終わり（3月末・8月末・12月末）のうち、
      date 以上でいちばん近いものを返す。date は "YYYY-MM-DD" */
   function termEnd(date){
@@ -276,13 +305,16 @@ var Domain = (function(){
       var cells = line.split(line.indexOf("\t") >= 0 ? "\t" : ",").map(function(c){
         c = c.trim(); return c.normalize ? c.normalize("NFKC") : c;
       });
-      var no = null, name = "";
+      var no = null, name = "", hasHead = false;
       cells.forEach(function(c){
         if(!c) return;
         var n = toInt(c);
         if(n != null){ if(no == null) no = n; }
-        else if(!name && !HEAD.test(c)) name = c.replace(/\s+/g, " ");
+        else if(HEAD.test(c)) hasHead = true;
+        else if(!name) name = c.replace(/\s+/g, " ");
       });
+      /* 見出しの字を含むのに番号の無い行は見出し行（「番号 氏名 組」など）と見て捨てる */
+      if(no == null && hasHead) return;
       if(name) rows.push({no:no, name:name});
     });
     var numbered = rows.filter(function(r){ return r.no != null && r.no > 0; }).length;
@@ -303,7 +335,7 @@ var Domain = (function(){
     pad:pad, jstDate:jstDate, jstStamp:jstStamp, jstParts:jstParts,
     stampMinutes:stampMinutes, hhmm:hhmm, isDate:isDate, asDate:asDate, asStamp:asStamp,
     addDays:addDays, weekday:weekday, toInt:toInt, termEnd:termEnd,
-    OPEN:OPEN, openAt:openAt,
+    OPEN:OPEN, openAt:openAt, ip4num:ip4num, ipAllowed:ipAllowed,
     isExempt:isExempt, finalMarks:finalMarks, dayView:dayView, dayDetail:dayDetail,
     stats:stats, parseRoster:parseRoster
   };

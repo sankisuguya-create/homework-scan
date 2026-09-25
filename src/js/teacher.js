@@ -325,6 +325,10 @@ var Teacher = (function(){
       + '<label class="field">提出率（%）が これより低いと 印<input type="number" id="se-rate" min="1" max="100" value="' + s.ratePct + '" style="width:7em"></label>'
       + '<label class="field">続けて 未提出の 日数が これ以上で 印<input type="number" id="se-streak" min="1" max="30" value="' + s.streakMin + '" style="width:7em"></label>'
       + '<label class="field">集計の 開始日<input type="date" id="se-from" value="' + esc(s.from) + '"></label></div></div>';
+    h += '<div class="sec"><h2>' + icon("shield") + '係の画面を ひらける ネットワーク</h2>'
+      + '<div class="line"><label class="field">校内の IP<input id="se-net" value="' + esc(s.netIps || "") + '" placeholder="例 203.0.113.5, 203.0.113.0/24" style="width:22em"></label></div>'
+      + '<p class="sub">空なら どこからでも 開けます。入れると 係の画面は この IP（edu-net）の中からしか 開けません。'
+      + 'カンマで いくつか 並べられ、範囲は /24 などで 書けます。校内で 調べた 外向きの IP を入れてください</p></div>';
     h += '<div class="sec"><h2>' + icon("users") + '係の画面の 氏名</h2><div class="chips">'
       + '<button class="pick" data-names="1" aria-pressed="' + s.showNames + '">出す</button>'
       + '<button class="pick" data-names="0" aria-pressed="' + !s.showNames + '">出さない（番号だけ）</button></div>'
@@ -417,7 +421,8 @@ var Teacher = (function(){
     if(t === "se-save"){
       var sn = $('[data-names][aria-pressed="true"]', root);
       return tcall("apiSaveSettings", {ratePct:Number($("#se-rate").value), streakMin:Number($("#se-streak").value),
-                                       from:$("#se-from").value, showNames: !sn || sn.getAttribute("data-names") === "1"})
+                                       from:$("#se-from").value, showNames: !sn || sn.getAttribute("data-names") === "1",
+                                       netIps:$("#se-net").value.trim()})
         .then(function(r){ SU = r; ST = null; show(); toast("せっていを保存しました"); });
     }
     if(t === "logs") return tcall("apiLogs").then(function(r){ logs = r; show(); });
