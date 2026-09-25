@@ -121,6 +121,13 @@ console.log("■ 先生が品目・名簿・過去の日を直す");
   s.apiSaveDay("2026-09-25", []);
   ok("品目を0にした日は「提出物なし」", s.apiToday().items.length === 0 && s.P.rows("日の品目").length === 1);
 
+  /* 「きょうとあした」画面の前提：あしたは未決定で品目が空、決めると hasDay になる */
+  const tm = s.apiTeacherDay("2026-09-26");
+  ok("あしたはまだ決まっていない", tm.hasDay === false && tm.items.length === 0, tm);
+  const tm2 = s.apiSaveDay("2026-09-26", [{slot:2, name:"計算ドリル"}]);
+  ok("あしたの宿題を先に決められる", tm2.hasDay === true && tm2.items.length === 1 && tm2.items[0].name === "計算ドリル", tm2.items);
+  ok("あしたを決めても、きょうの「提出物なし」は変わらない", s.apiToday().items.length === 0);
+
   s.apiSaveDay("2026-09-24", [{slot:1, name:"漢字ドリル"}]);
   s.apiMark([{id:"ev-past-01", date:"2026-09-24", no:1, slot:1, op:"on", at:T0, via:"teacher"}]);
   const row = s.P.rows("記録").filter(r => r[0] === "2026-09-24")[0];

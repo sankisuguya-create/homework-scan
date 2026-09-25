@@ -155,6 +155,10 @@ button{cursor:pointer;touch-action:manipulation}
 .pick{min-width:64px;min-height:52px;border:var(--thin);border-radius:var(--r);background:var(--paper);font-weight:800;font-size:20px;display:inline-flex;align-items:center;gap:6px;padding:4px 12px}
 .pick[aria-pressed="true"]{background:var(--ink);color:var(--paper)}
 .pick .ic{width:24px;height:24px}
+.fold>summary{cursor:pointer;font-weight:800;font-size:22px;display:inline-flex;align-items:center;gap:8px;border:var(--thin);border-radius:var(--r);padding:10px 14px;min-height:52px;list-style:none;width:max-content}
+.fold>summary::-webkit-details-marker{display:none}
+.fold>summary .ic{width:26px;height:26px}
+.fold[open]>summary{margin-bottom:10px}
 .field{display:flex;flex-direction:column;gap:4px;font-weight:700;font-size:18px}
 .field input,.field select,.tbl input,.tbl select{border:var(--thin);border-radius:6px;padding:8px 10px;font-size:20px;background:var(--paper);min-height:48px}
 textarea{border:var(--thin);border-radius:6px;padding:10px;font-size:18px;width:100%;min-height:150px}
@@ -961,6 +965,7 @@ var Helper = (function(){
 })();
 /* ==================================================================
    先生の画面。教職員のアカウントで開いたときだけ出す（サーバも teacher() で確かめる）。
+     きょうとあした … 最初に開く画面。きょう／あしたの宿題を決める＋きょうの未提出者
      きょうの表 … その日の提出物を決める・欠席・マスを直す（前の7日まで）
      分析       … 提出率・平均提出時刻・続けて出ていない日数
      免除       … 特別な事情のある子を、期間・品目ごとに外す
@@ -968,10 +973,11 @@ var Helper = (function(){
      せってい   … 分析の目安、係の画面の氏名、操作記録
 ================================================================== */
 var Teacher = (function(){
-  var root = null, opts = {}, tab = "day", active = false;
+  var root = null, opts = {}, tab = "home", active = false;
   var D = null, SU = null, ST = null, date = "", sortBy = "no", roster = null, logs = null;
-  var TABS = [["day", "calendar", "きょうの表"], ["stats", "chart", "分析"], ["exempt", "shield", "免除"],
-              ["roster", "users", "名簿と品目"], ["settings", "gear", "せってい"]];
+  var H1 = null, H2 = null;   /* きょうとあした：H1=きょう、H2=あした */
+  var TABS = [["home", "paper", "きょうとあした"], ["day", "calendar", "きょうの表"], ["stats", "chart", "分析"],
+              ["exempt", "shield", "免除"], ["roster", "users", "名簿と品目"], ["settings", "gear", "せってい"]];
 
   /* サーバを呼び、失敗したら知らせる */
   function tcall(name){
@@ -995,6 +1001,7 @@ var Teacher = (function(){
 
   function show(){
     if(!active) return;
+    if(tab === "home") return (H1 && H2) ? frame(homeHtml()) : loadHome();
     if(tab === "day") return D ? frame(dayHtml()) : loadDay(date);
     if(tab === "stats") return ST ? frame(statsHtml()) : loadStats();
     if(!SU) return loadSetup();
@@ -1006,6 +1013,13 @@ var Teacher = (function(){
     loading();
     return tcall("apiTeacherDay", d || "").then(function(r){ D = r; date = r.date; show(); });
   }
+  function loadHome(){
+    loading();
+    return tcall("apiTeacherDay", "").then(function(r1){
+      H1 = r1;
+      return tcall("apiTeacherDay", Domain.addDays(r1.today, 1));
+    }).then(function(r2){ H2 = r2; show(); });
+  }
   function loadSetup(){
     loading();
     return tcall("apiSetup").then(function(r){ SU = r; roster = null; show(); });
@@ -1013,6 +1027,66 @@ var Teacher = (function(){
   function loadStats(from, to){
     loading();
     return tcall("apiStats", from || "", to || "").then(function(r){ ST = r; show(); });
+  }
+
+  /* ────────── きょうとあした（最初に開く画面） ──────────
+     きょう・あしたの宿題を決める欄と、きょうの未提出者の一覧。
+     未提出者が7人以上のときは、トグルで畳んでおく。 */
+  function homeHtml(){
+    return dayPane(H1, "today", "きょう") + dayPane(H2, "tomorrow", "あした")
+      + '<div class="sec"><h2>' + icon("users") + 'きょうの 未提出</h2>' + missingHtml() + '</div>'
+      + '<div class="line"><button class="btn" data-t="home-re">' + icon("sync") + 'いまの 状態に 更新</button></div>';
+  }
+  /* 1日分の宿題を決める欄。「あした」が未決定なら「いつも出す」を最初のチェックにする */
+  function dayPane(Dx, pane, label){
+    var onDay = {};
+    Dx.items.forEach(function(it){ onDay[it.slot] = it.name; });
+    var note = Dx.hasDay ? '' : (pane === "tomorrow"
+      ? '<p class="note">あしたは まだ 決まっていません。「いつも出す」の品目に チェックを付けています。決めると あしたの表が作られ、集計に入ります。</p>'
+      : '<p class="note">この日は まだ 集計に入っていません（まだ 印が 付いていない日）。</p>');
+    return '<div class="sec" data-pane="' + pane + '"><h2>' + icon("calendar") + label + 'の 宿題（'
+      + esc(dateLabel(Dx.date, Dx.wd)) + '）</h2>' + note
+      + '<div class="slots">' + Dx.slots.map(function(s){
+          var on = (s.slot in onDay) || (!Dx.hasDay && pane === "tomorrow" && s.daily && !!s.name);
+          return '<label class="slot' + (on ? " on" : "") + '"><input type="checkbox" data-pslot="' + s.slot + '"' + (on ? " checked" : "") + '>'
+            + icon(s.icon) + '<input type="text" maxlength="20" data-pslotname="' + s.slot + '" value="' + esc(onDay[s.slot] || s.name) + '" placeholder="（名前）"></label>';
+        }).join("") + '</div>'
+      + '<div class="line"><button class="btn primary" data-t="save-pane" data-saveof="' + pane + '">' + icon("save") + label + 'の 宿題を 決める</button>'
+      + '<span class="note">品目を 1つも 付けずに決めると「提出物なし」の日になり、集計に入りません。</span></div></div>';
+  }
+  /* きょうの未提出者。○でも休でもないマス（免除は除く）が残っている児童 */
+  function missingHtml(){
+    if(!H1.items.length) return '<div class="empty-msg">きょうは 提出物が ありません。</div>';
+    var left = [];
+    H1.roster.forEach(function(st){
+      var names = H1.items.filter(function(it){
+        var c = H1.cells[st.no + ":" + it.slot] || {};
+        return !c.exempt && c.state !== "on" && c.state !== "rest";
+      }).map(function(it){ return it.name; });
+      if(names.length) left.push({st:st, names:names});
+    });
+    if(!left.length) return '<div class="empty-msg">' + icon("check") + ' 全員 そろっています</div>';
+    var chips = '<div class="chips">' + left.map(function(m){
+      return '<span class="pick" style="cursor:default">' + m.st.no + ' ' + esc(m.st.name)
+           + '（' + m.names.map(esc).join("・") + '）</span>';
+    }).join("") + '</div>';
+    /* 7人以上は畳んでおく。押すとひらく */
+    return left.length >= 7
+      ? '<details class="fold"><summary>' + icon("users") + 'まだ の 児童 ' + left.length + '人（押すと ひらきます）</summary>' + chips + '</details>'
+      : chips;
+  }
+  function savePane(pane, btn){
+    var Dx = pane === "today" ? H1 : H2, box = btn.closest("[data-pane]");
+    var items = $$("[data-pslot]", box).filter(function(x){ return x.checked; }).map(function(x){
+      var s = Number(x.getAttribute("data-pslot"));
+      return {slot:s, name: $('[data-pslotname="' + s + '"]', box).value.trim()};
+    });
+    if(items.some(function(i){ return !i.name; })){ toast("名前の無い品目があります", true); return; }
+    tcall("apiSaveDay", Dx.date, items).then(function(r){
+      if(pane === "today") H1 = r; else H2 = r;
+      D = null; ST = null;
+      show(); toast((pane === "today" ? "きょう" : "あした") + "の 宿題を 決めました");
+    });
   }
 
   /* ────────── きょうの表 ────────── */
@@ -1337,6 +1411,8 @@ var Teacher = (function(){
     if(t === "next") return loadDay(Domain.addDays(D.date, 1));
     if(t === "today") return loadDay("");
     if(t === "save-day") return saveDay();
+    if(t === "save-pane") return savePane(b.getAttribute("data-saveof"), b);
+    if(t === "home-re") return loadHome();
     if(t === "save-abs") return saveAbs();
     if(t === "stats-run") return loadStats($("#st-from").value, $("#st-to").value);
     if(t === "ex-add"){
@@ -1391,14 +1467,15 @@ var Teacher = (function(){
   function onChange(e){
     if(!active || !root.contains(e.target)) return;
     if(e.target.id === "st-sort"){ sortBy = e.target.value; show(); }
-    if(e.target.matches("[data-slot]")) e.target.closest(".slot").classList.toggle("on", e.target.checked);
+    if(e.target.matches("[data-slot]") || e.target.matches("[data-pslot]"))
+      e.target.closest(".slot").classList.toggle("on", e.target.checked);
   }
   document.addEventListener("click", onClick);
   document.addEventListener("change", onChange);
 
   function mount(el, o){
     root = el; opts = o || {}; active = true;
-    tab = "day"; D = SU = ST = null; roster = null; logs = null; date = "";
+    tab = "home"; D = SU = ST = null; H1 = H2 = null; roster = null; logs = null; date = "";
     show();
   }
   function unmount(){ active = false; }
