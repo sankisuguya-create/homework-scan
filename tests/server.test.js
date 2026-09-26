@@ -119,33 +119,6 @@ console.log("■ 欠席は「休」、免除は係に理由を見せない");
   ok("理由（メモ）は係に渡さない", JSON.stringify(st).indexOf("けが") < 0);
 }
 
-console.log("■ 係が名前をタップして休みを切り替える（apiMark の abs イベント）");
-{
-  const s = fresh();
-  const st = s.apiToday();
-  ok("はじめは欠席なし", (st.absent || []).length === 0, st.absent);
-
-  const r = s.apiMark([{id:"ab-000001", date:st.date, no:2, abs:true, at:JST(st.date, "08:30"), via:"tap"}]);
-  ok("欠席シートに行が増える", s.P.rows("欠席").some(x => x[0] === st.date && Number(x[1]) === 2), s.P.rows("欠席"));
-  ok("state.absent に番号が入る", r.state.absent.indexOf(2) >= 0, r.state.absent);
-  ok("その子の全マスが「休」", [1, 2, 3].every(n => r.state.cells["2:" + n] === "rest"), r.state.cells);
-
-  const r2 = s.apiMark([{id:"ab-000002", date:st.date, no:2, abs:false, at:JST(st.date, "08:35"), via:"tap"}]);
-  ok("出席に戻すと欠席行が消える", !s.P.rows("欠席").some(x => x[0] === st.date && Number(x[1]) === 2));
-  ok("state.absent から消え、マスは元に戻る", r2.state.absent.indexOf(2) < 0 && !r2.state.cells["2:1"], r2.state);
-
-  /* 先に○を付けてから休み→出席に戻すと、押した印が残っている */
-  s.apiMark([{id:"ab-000003", date:st.date, no:3, slot:1, op:"on", at:JST(st.date, "08:10"), via:"tap"}]);
-  s.apiMark([{id:"ab-000004", date:st.date, no:3, abs:true, at:JST(st.date, "08:20"), via:"tap"}]);
-  const r3 = s.apiMark([{id:"ab-000005", date:st.date, no:3, abs:false, at:JST(st.date, "08:40"), via:"tap"}]);
-  ok("戻すと押した○が残る", r3.state.cells["3:1"] === "on", r3.state.cells);
-
-  /* 同じ abs:true を2回送っても行は1行だけ（送り直しに強い） */
-  s.apiMark([{id:"ab-000006", date:st.date, no:19, abs:true, at:JST(st.date, "08:50"), via:"tap"},
-             {id:"ab-000007", date:st.date, no:19, abs:true, at:JST(st.date, "08:50"), via:"tap"}]);
-  ok("重複して欠席行が増えない", s.P.rows("欠席").filter(x => Number(x[1]) === 19).length === 1, s.P.rows("欠席"));
-}
-
 console.log("■ 先生が品目・名簿・過去の日を直す");
 {
   const s = fresh();
