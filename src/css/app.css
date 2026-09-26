@@ -231,7 +231,14 @@ textarea{border:var(--thin);border-radius:6px;padding:10px;font-size:18px;width:
 .teacher .sec[data-pane="tomorrow"] .slot.on{border-color:#15803D;background:rgba(21,128,61,.12)}
 .teacher .sec[data-pane="tomorrow"] .btn.primary{background:#15803D;border-color:#15803D}
 .teacher .sec[data-pane="tomorrow"] .slot input[type="checkbox"]{accent-color:#15803D}
-/* 枠6〜9の折りたたみはグリッドいっぱいに広げる */
-.teacher .slots>.slotfold{grid-column:1/-1}
+/* 6〜9枠は「＋」（6枠目の位置）で開閉。既定は非表示 */
+.teacher .slots .xmore{display:none}
+.teacher .slots.xopen .xmore{display:flex}
+.teacher table .xmore{display:none}
+.teacher table.xopen .xmore{display:table-row}
+.teacher .slotmore{justify-content:center;border-style:dashed;cursor:pointer;background:rgba(255,255,255,.35);color:var(--sub)}
+.teacher button.slotmore{border:2px dashed rgba(22,33,61,.35);border-radius:999px;padding:4px 18px;min-height:40px;background:rgba(255,255,255,.4);color:var(--sub);cursor:pointer}
+.teacher .slotmore .ic{width:30px;height:30px}
+.teacher .slotmore-r td{text-align:center;padding:4px}
 .teacher .slots{gap:10px}
 .teacher .slot{padding:8px}
