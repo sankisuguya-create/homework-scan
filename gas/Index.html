@@ -1115,13 +1115,13 @@ var Teacher = (function(){
   function dayPane(Dx, pane, label){
     var onDay = {};
     Dx.items.forEach(function(it){ onDay[it.slot] = it.name; });
-    var note = Dx.hasDay ? '' : (pane === "tomorrow"
+    var note = Dx.hasDay ? '' : (Dx.date !== Dx.today
       ? '<p class="note">この日は まだ 決まっていません。「いつも出す」の品目に チェックを付けています。決めると この日の表が作られ、集計に入ります。</p>'
       : '<p class="note">この日は まだ 集計に入っていません（まだ 印が 付いていない日）。</p>');
     return '<div class="sec" data-pane="' + pane + '" data-label="' + esc(label) + '"><h2>' + icon("calendar") + label + 'の 宿題（'
       + esc(dateLabel(Dx.date, Dx.wd)) + '）</h2>' + note
       + '<div class="slots">' + Dx.slots.map(function(s){
-          var on = (s.slot in onDay) || (!Dx.hasDay && pane === "tomorrow" && s.daily && !!s.name);
+          var on = (s.slot in onDay) || (!Dx.hasDay && Dx.date !== Dx.today && s.daily && !!s.name);
           return '<label class="slot' + (on ? " on" : "") + '"><input type="checkbox" data-pslot="' + s.slot + '"' + (on ? " checked" : "") + '>'
             + icon(s.icon) + '<input type="text" maxlength="20" data-pslotname="' + s.slot + '" value="' + esc(onDay[s.slot] || s.name) + '" placeholder="（名前）"></label>';
         }).join("") + '</div>'
