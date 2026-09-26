@@ -10,7 +10,10 @@ function call(name){
 function errText(err){
   var m = String(err && err.message || err || "");
   if(/network|NetworkError|Failed to fetch|通信/i.test(m)) return "つながりませんでした。少しして、もう一度ためしてください。";
-  return m.replace(/^Error:\s*/, "").slice(0, 120) || "うまくいきませんでした。";
+  var t = m.replace(/^Error:\s*/, "").slice(0, 120);
+  /* 日本語の入っていないメッセージ（GAS内部エラー等）は読み手に伝わらないので畳む */
+  if(t && !/[ぁ-んァ-ヶ一-龥]/.test(t)) t = "";
+  return t || "うまくいきませんでした。もう一度ためしてください。";
 }
 
 function esc(s){
