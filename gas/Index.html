@@ -197,7 +197,9 @@ textarea{border:var(--thin);border-radius:6px;padding:10px;font-size:18px;width:
 /* ================= 先生の画面のテーマ：ガラス × ピル =================
    .teacher の中だけで上書きするので、係（児童）の画面は変わらない。
    背景は .teacher の data-bg で切り替え：grad=やわらか（既定）、
-   geo=幾何学、white=白。文字色はどの背景でも濃い紺（7:1 以上）。 */
+   geo=幾何学、white=白。文字色はどの背景でも濃い紺（7:1 以上）。
+   ガラス感は半透明の白で表し backdrop-filter は使わない
+   — 面積の大きい .sec に blur をかけると低スペック端末で描画が重い */
 .teacher{--ink:#16213D;--done:#1D4ED8;--warn:#F59E0B;--soft:rgba(255,255,255,.5);--r:999px}
 .teacher[data-bg="grad"]{background:linear-gradient(135deg,#FDEEDD 0%,#EEF6F0 55%,#E8EEFB 100%);background-attachment:fixed}
 .teacher[data-bg="geo"]{background-color:#D9E4F5;
@@ -208,13 +210,13 @@ textarea{border:var(--thin);border-radius:6px;padding:10px;font-size:18px;width:
     linear-gradient(120deg,rgba(120,145,185,.18) 25%,transparent 25.5%,transparent 75%,rgba(120,145,185,.18) 75.5%);
   background-size:90px 156px;background-position:0 0,0 0,45px 78px,45px 78px}
 .teacher[data-bg="white"]{background:#F1F3F8}
-.teacher .tbar{background:rgba(255,255,255,.55);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-bottom:1px solid rgba(255,255,255,.7);padding-left:16px}
+.teacher .tbar{background:rgba(255,255,255,.82);border-bottom:1px solid rgba(255,255,255,.7);padding-left:16px}
 .teacher .tabs{gap:10px;padding:8px 12px;border-bottom:0;background:rgba(255,255,255,.25)}
 .teacher .tab{border-radius:999px;border:1px solid rgba(22,33,61,.28);background:rgba(255,255,255,.55);border-bottom:1px solid rgba(22,33,61,.28);padding:9px 18px;min-height:50px}
 .teacher .tab[aria-selected="true"]{background:#16213D;color:#fff;border-color:#16213D}
 .teacher .tab[aria-selected="true"] .ic{color:#fff}
 .teacher .tbody{gap:12px;padding:12px 14px}
-.teacher .sec{background:rgba(255,255,255,.55);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,.7);border-radius:24px;padding:14px 16px;gap:10px;box-shadow:0 10px 30px rgba(22,33,61,.10)}
+.teacher .sec{background:rgba(255,255,255,.82);border:1px solid rgba(255,255,255,.7);border-radius:24px;padding:14px 16px;gap:10px;box-shadow:0 10px 30px rgba(22,33,61,.10)}
 /* 「今日と明日」の2欄を横並びにしてスクロールなしで総覧できるようにする（狭い画面では縦積み）
    ※ .panes は係画面が使っているので、先生側は .twins */
 .teacher .twins{display:grid;grid-template-columns:1fr 1fr;gap:12px}
@@ -688,7 +690,10 @@ function call(name){
 function errText(err){
   var m = String(err && err.message || err || "");
   if(/network|NetworkError|Failed to fetch|通信/i.test(m)) return "つながりませんでした。少しして、もう一度ためしてください。";
-  return m.replace(/^Error:\s*/, "").slice(0, 120) || "うまくいきませんでした。";
+  var t = m.replace(/^Error:\s*/, "").slice(0, 120);
+  /* 日本語の入っていないメッセージ（GAS内部エラー等）は読み手に伝わらないので畳む */
+  if(t && !/[ぁ-んァ-ヶ一-龥]/.test(t)) t = "";
+  return t || "うまくいきませんでした。もう一度ためしてください。";
 }
 
 function esc(s){
