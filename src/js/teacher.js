@@ -77,7 +77,7 @@ var Teacher = (function(){
   function homeHtml(){
     var l1 = H1.date === H1.today ? "今日" : "次の登校日";
     var l2 = H2.date === Domain.addDays(H1.today, 1) ? "明日" : "次の登校日";
-    return dayPane(H1, "today", l1) + dayPane(H2, "tomorrow", l2)
+    return '<div class="twins">' + dayPane(H1, "today", l1) + dayPane(H2, "tomorrow", l2) + '</div>'
       + '<div class="sec"><h2>' + icon("users") + '今日の未提出</h2>'
       + (H1.date === H1.today ? missingHtml()
          : '<div class="empty-msg">今日は休みです（' + esc(dateLabel(H1.today, Domain.weekday(H1.today))) + '）。</div>')
@@ -112,13 +112,13 @@ var Teacher = (function(){
     var onDay = {};
     Dx.items.forEach(function(it){ onDay[it.slot] = it.name; });
     var note = Dx.hasDay ? '' : (Dx.date !== Dx.today
-      ? '<p class="note">この日はまだ決まっていません。「いつも出す」の品目にチェックを付けています。決定するとこの日の表が作られ、集計に入ります。</p>'
+      ? '<p class="note">未決定です。「いつも出す」にチェックを付けています。決定するとこの日の表が作られます。</p>'
       : '<p class="note">この日はまだ集計に入っていません（まだ印が付いていない日）。</p>');
     return '<div class="sec" data-pane="' + pane + '" data-label="' + esc(label) + '"><h2>' + icon("calendar") + label + 'の宿題（'
       + esc(dateLabel(Dx.date, Dx.wd)) + '）</h2>' + note
       + slotGrid(Dx.slots, onDay, !Dx.hasDay && Dx.date !== Dx.today, "data-pslot", "data-pslotname")
       + '<div class="line"><button class="btn primary" data-t="save-pane" data-saveof="' + pane + '">' + icon("save") + label + 'の宿題を決定</button>'
-      + '<span class="note">品目を1つも付けずに決定すると「提出物なし」の日になり、集計に入りません。</span></div></div>';
+      + '<span class="note">全部はずして決定すると「提出物なし」の日になります。</span></div></div>';
   }
   /* 今日の未提出者。○でも休でもないマス（免除は除く）が残っている児童 */
   function missingHtml(){
@@ -172,7 +172,7 @@ var Teacher = (function(){
       + '<p class="note">チェックを付けた品目がこの日の表に並びます。名前はこの日だけ変えられます（普段の名前は「名簿と品目」で）。</p>'
       + slotGrid(D.slots, onDay, false, "data-slot", "data-slotname")
       + '<div class="line"><button class="btn primary" data-t="save-day">' + icon("save") + 'この日の提出物を決定</button>'
-      + '<span class="note">品目を1つも付けずに決定すると「提出物なし」の日になり、集計に入りません。</span></div></div>';
+      + '<span class="note">全部はずして決定すると「提出物なし」の日になります。</span></div></div>';
 
     var abs = {}; D.absent.forEach(function(n){ abs[n] = true; });
     h += '<div class="sec"><h2>' + icon("bed") + '欠席</h2>'

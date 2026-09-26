@@ -202,12 +202,19 @@ textarea{border:var(--thin);border-radius:6px;padding:10px;font-size:18px;width:
   background-size:90px 156px;background-position:0 0,0 0,45px 78px,45px 78px}
 .teacher[data-bg="white"]{background:#F1F3F8}
 .teacher .tbar{background:rgba(255,255,255,.55);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-bottom:1px solid rgba(255,255,255,.7);padding-left:16px}
-.teacher .tabs{gap:10px;padding:10px 14px;border-bottom:0;background:rgba(255,255,255,.25)}
-.teacher .tab{border-radius:999px;border:1px solid rgba(22,33,61,.28);background:rgba(255,255,255,.55);border-bottom:1px solid rgba(22,33,61,.28);padding:12px 22px}
+.teacher .tabs{gap:10px;padding:8px 12px;border-bottom:0;background:rgba(255,255,255,.25)}
+.teacher .tab{border-radius:999px;border:1px solid rgba(22,33,61,.28);background:rgba(255,255,255,.55);border-bottom:1px solid rgba(22,33,61,.28);padding:9px 18px;min-height:50px}
 .teacher .tab[aria-selected="true"]{background:#16213D;color:#fff;border-color:#16213D}
 .teacher .tab[aria-selected="true"] .ic{color:#fff}
-.teacher .tbody{gap:18px;padding:18px 16px}
-.teacher .sec{background:rgba(255,255,255,.55);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,.7);border-radius:24px;padding:18px 22px;box-shadow:0 10px 30px rgba(22,33,61,.10)}
+.teacher .tbody{gap:12px;padding:12px 14px}
+.teacher .sec{background:rgba(255,255,255,.55);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,.7);border-radius:24px;padding:14px 16px;gap:10px;box-shadow:0 10px 30px rgba(22,33,61,.10)}
+/* 「今日と明日」の2欄を横並びにしてスクロールなしで総覧できるようにする（狭い画面では縦積み）
+   ※ .panes は係画面が使っているので、先生側は .twins */
+.teacher .twins{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media (max-width:980px){.teacher .twins{grid-template-columns:1fr}}
+/* 欄の中の品目は3列にして縦幅を稼ぐ */
+.teacher .twins .slots{grid-template-columns:repeat(auto-fill,minmax(190px,1fr))}
+.teacher .twins .slots .slot input[type="text"]{min-width:0}
 .teacher .sec h2{border-bottom:0;padding-bottom:0}
 .teacher .btn{border-radius:999px;border:2px solid rgba(22,33,61,.35);background:rgba(255,255,255,.6)}
 .teacher .btn.primary{background:#1D4ED8;border-color:#1D4ED8;color:#fff}
@@ -216,7 +223,7 @@ textarea{border:var(--thin);border-radius:6px;padding:10px;font-size:18px;width:
 .teacher .pick[aria-pressed="true"]{background:#16213D;color:#fff}
 .teacher .pick[aria-pressed="true"] .ic{color:#fff}
 .teacher .pick.t-blue,.teacher .pick.t-red,.teacher .pick.t-green{border:2px solid rgba(22,33,61,.3)}
-.teacher .fold>summary{border-radius:999px;border:2px solid rgba(22,33,61,.3);background:rgba(255,255,255,.6);padding:10px 20px;font-size:20px}
+.teacher .fold>summary{border-radius:999px;border:2px solid rgba(22,33,61,.3);background:rgba(255,255,255,.6);padding:6px 14px;min-height:44px;font-size:20px}
 .teacher .fold>summary::-webkit-details-marker{display:none}
 .teacher .slot{border-radius:16px;border:2px solid rgba(22,33,61,.16);background:rgba(255,255,255,.45)}
 .teacher .slot.on{border-color:#1D4ED8;background:rgba(29,78,216,.10)}
@@ -236,6 +243,8 @@ textarea{border:var(--thin);border-radius:6px;padding:10px;font-size:18px;width:
 .teacher .sec[data-pane="tomorrow"] .slot input[type="checkbox"]{accent-color:#15803D}
 /* 枠6〜9の折りたたみはグリッドいっぱいに広げる */
 .teacher .slots>.slotfold{grid-column:1/-1}
+.teacher .slots{gap:10px}
+.teacher .slot{padding:8px}
 </style>
 </head>
 <body>
@@ -1732,7 +1741,7 @@ var Teacher = (function(){
   function homeHtml(){
     var l1 = H1.date === H1.today ? "今日" : "次の登校日";
     var l2 = H2.date === Domain.addDays(H1.today, 1) ? "明日" : "次の登校日";
-    return dayPane(H1, "today", l1) + dayPane(H2, "tomorrow", l2)
+    return '<div class="twins">' + dayPane(H1, "today", l1) + dayPane(H2, "tomorrow", l2) + '</div>'
       + '<div class="sec"><h2>' + icon("users") + '今日の未提出</h2>'
       + (H1.date === H1.today ? missingHtml()
          : '<div class="empty-msg">今日は休みです（' + esc(dateLabel(H1.today, Domain.weekday(H1.today))) + '）。</div>')
@@ -1767,13 +1776,13 @@ var Teacher = (function(){
     var onDay = {};
     Dx.items.forEach(function(it){ onDay[it.slot] = it.name; });
     var note = Dx.hasDay ? '' : (Dx.date !== Dx.today
-      ? '<p class="note">この日はまだ決まっていません。「いつも出す」の品目にチェックを付けています。決定するとこの日の表が作られ、集計に入ります。</p>'
+      ? '<p class="note">未決定です。「いつも出す」にチェックを付けています。決定するとこの日の表が作られます。</p>'
       : '<p class="note">この日はまだ集計に入っていません（まだ印が付いていない日）。</p>');
     return '<div class="sec" data-pane="' + pane + '" data-label="' + esc(label) + '"><h2>' + icon("calendar") + label + 'の宿題（'
       + esc(dateLabel(Dx.date, Dx.wd)) + '）</h2>' + note
       + slotGrid(Dx.slots, onDay, !Dx.hasDay && Dx.date !== Dx.today, "data-pslot", "data-pslotname")
       + '<div class="line"><button class="btn primary" data-t="save-pane" data-saveof="' + pane + '">' + icon("save") + label + 'の宿題を決定</button>'
-      + '<span class="note">品目を1つも付けずに決定すると「提出物なし」の日になり、集計に入りません。</span></div></div>';
+      + '<span class="note">全部はずして決定すると「提出物なし」の日になります。</span></div></div>';
   }
   /* 今日の未提出者。○でも休でもないマス（免除は除く）が残っている児童 */
   function missingHtml(){
@@ -1827,7 +1836,7 @@ var Teacher = (function(){
       + '<p class="note">チェックを付けた品目がこの日の表に並びます。名前はこの日だけ変えられます（普段の名前は「名簿と品目」で）。</p>'
       + slotGrid(D.slots, onDay, false, "data-slot", "data-slotname")
       + '<div class="line"><button class="btn primary" data-t="save-day">' + icon("save") + 'この日の提出物を決定</button>'
-      + '<span class="note">品目を1つも付けずに決定すると「提出物なし」の日になり、集計に入りません。</span></div></div>';
+      + '<span class="note">全部はずして決定すると「提出物なし」の日になります。</span></div></div>';
 
     var abs = {}; D.absent.forEach(function(n){ abs[n] = true; });
     h += '<div class="sec"><h2>' + icon("bed") + '欠席</h2>'
