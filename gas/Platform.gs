@@ -90,10 +90,11 @@ var P = (function(){
     return b.map(function(x){ return ((x + 256) % 256).toString(16).replace(/^(.)$/, "0$1"); }).join("");
   }
   function url(){ try{ return ScriptApp.getService().getUrl() || ""; }catch(err){ return ""; } }
+  function sheetUrl(){ try{ return book().getUrl() || ""; }catch(err){ return ""; } }
 
   return {rows:rows, tail:tail, append:append, replace:replace, put:put,
           prop:prop, setProp:setProp, cacheGet:cacheGet, cachePut:cachePut, cacheDel:cacheDel,
-          lock:lock, now:now, uuid:uuid, hash:hash, url:url,
+          lock:lock, now:now, uuid:uuid, hash:hash, url:url, sheetUrl:sheetUrl,
           who:function(){ return Gate.checkAny(); }};
 })();
 

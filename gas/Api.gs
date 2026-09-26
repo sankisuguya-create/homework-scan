@@ -15,7 +15,8 @@
 ================================================================== */
 
 var TABLES = {
-  "名簿":     ["番号", "氏名"],
+  /* 名簿は算数タイムアタックと同じ並び。先生がシートに直接貼り付ける（サイトでは編集しない） */
+  "名簿":     ["メールアドレス", "学年", "組", "番号", "氏名"],
   "品目":     ["枠", "名前", "アイコン", "いつも出す", "色"],
   "日の品目": ["日付", "枠", "名前"],
   "記録":     ["日付", "番号", "枠1", "枠2", "枠3", "枠4", "枠5", "枠6", "枠7", "枠8", "枠9"],
@@ -61,12 +62,20 @@ function teacher(){
 }
 
 /* ── 表を読む ─────────────────────────────── */
+/* 「名簿」シートが正本。並びは メアド,学年,組,番号,氏名（算数TAと同じ）。
+   以前の 番号,氏名（＋任意でメアド）の行も読めるように両方を受ける。 */
 function readRoster(){
   var out = [], seen = {};
   P.rows("名簿").forEach(function(r){
-    var no = Domain.toInt(r[0]), name = String(r[1] || "").trim();
+    var no, name, email = "";
+    if(String(r[0] || "").indexOf("@") >= 0){
+      email = Gate.norm(r[0]); no = Domain.toInt(r[3]); name = String(r[4] || "").trim();
+    }else{
+      no = Domain.toInt(r[0]); name = String(r[1] || "").trim();
+      if(String(r[2] || "").indexOf("@") >= 0) email = Gate.norm(r[2]);
+    }
     if(no == null || no < 1 || no > 99 || !name || seen[no]) return;
-    seen[no] = true; out.push({no:no, name:name});
+    seen[no] = true; out.push({no:no, name:name, email:email});
   });
   return out.sort(function(a, b){ return a.no - b.no; });
 }
@@ -367,20 +376,9 @@ function apiSetup(){
   teacher();
   return {roster:readRoster(), slots:readSlots(), exemptions:readExemptions(),
           helpers:readHelpers(),
-          settings:readSettings(), icons:ICONS, url:P.url(), today:today()};
+          settings:readSettings(), icons:ICONS, url:P.url(), sheetUrl:P.sheetUrl(), today:today()};
 }
-function apiSaveRoster(list){
-  teacher();
-  var seen = {}, rows = [];
-  (list || []).forEach(function(s){
-    var no = Domain.toInt(s && s.no), name = String(s && s.name || "").trim().slice(0, 40);
-    if(no == null || no < 1 || no > 99 || !name || seen[no]) return;
-    seen[no] = true; rows.push([no, name]);
-  });
-  rows.sort(function(a, b){ return a[0] - b[0]; });
-  P.lock(function(){ P.replace("名簿", rows); });
-  return apiSetup();
-}
+
 function apiSaveSlots(slots){
   teacher();
   var by = {};
@@ -413,17 +411,29 @@ function apiSaveExemptions(list){
   P.lock(function(){ P.replace("免除", rows); });
   return apiSetup();
 }
-function apiSaveHelpers(list){
+/* 係の指定は児童の番号で受ける。メアドは名簿から引く（先生はアドレスを打たない）。
+   新しく選んだ子の期限は until（空なら学期末）。すでに係の子は今の期限とメモを残す */
+function apiSaveHelpers(nos, until){
   teacher();
-  var seen = {}, rows = [], cap = Domain.termEnd(today());
-  (list || []).slice(0, 100).forEach(function(h){
-    var e = Gate.norm(h && h.email);
-    var at = e.lastIndexOf("@");
-    if(!e || at <= 0 || at === e.length - 1 || /\s/.test(e) || seen[e]) return;
-    seen[e] = true;
-    var u = Domain.asDate(h && h.until);
-    rows.push([e, (u && u < cap) ? u : cap, String(h && h.memo || "").slice(0, 60)]);
+  var byNo = {};
+  readRoster().forEach(function(s){ if(s.email) byNo[s.no] = s; });
+  var prev = {};
+  P.rows("係").forEach(function(r){
+    var e = Gate.norm(r[0]);
+    if(e) prev[e] = {until:Domain.asDate(r[1]), memo:String(r[2] || "")};
   });
+  var cap = Domain.termEnd(today()), nu = Domain.asDate(until);
+  var rows = [], seen = {};
+  (nos || []).slice(0, 100).forEach(function(x){
+    var no = Domain.toInt(x), s = no && byNo[no];
+    if(!s || seen[s.email]) return;
+    seen[s.email] = true;
+    /* まだ切れていない期限はそのまま残す。切れた期限・新規は until（空なら学期末） */
+    var pu = prev[s.email] && prev[s.email].until;
+    var u = (pu && today() <= pu) ? pu : (nu || cap);
+    rows.push([s.email, (u && u < cap) ? u : cap, (prev[s.email] ? prev[s.email].memo : "").slice(0, 60)]);
+  });
+  rows.sort(function(a, b){ return a[0] < b[0] ? -1 : 1; });
   P.lock(function(){ P.replace("係", rows); });
   return apiSetup();
 }

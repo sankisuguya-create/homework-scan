@@ -8,7 +8,7 @@ var google = {script: {run: (function(){
       withFailureHandler: function(f){ return runner(ok, f); }
     };
     ["apiToday", "apiMark", "apiTeacherDay",
-     "apiSaveDay", "apiSetAbsent", "apiSetup", "apiSaveRoster", "apiSaveSlots",
+     "apiSaveDay", "apiSetAbsent", "apiSetup", "apiSaveSlots",
      "apiSaveExemptions", "apiSaveSettings", "apiStats", "apiLogs", "apiSaveHelpers"].forEach(function(name){
       r[name] = function(){
         var args = JSON.parse(JSON.stringify(Array.prototype.slice.call(arguments)));

@@ -64,6 +64,7 @@ var P = (function(){
       return h1.toString(16) + h2.toString(16);
     },
     url: function(){ return ""; },
+    sheetUrl: function(){ return ""; },
     who: function(){ return Gate.checkAny(); },
 
     /* 検査とデモのための口。本物の Platform.gs には無い */
