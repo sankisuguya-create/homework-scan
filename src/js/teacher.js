@@ -103,22 +103,21 @@ var Teacher = (function(){
         + '" placeholder="（名前）"></label>';
       (s.slot > 5 && !s.name && !on ? hid : vis).push(cell);
     });
-    return '<div class="slots">' + vis.join("") + (hid.length
-      ? '<details class="fold slotfold"><summary>' + icon("plus") + 'さらに枠を増やす（6〜9）</summary>'
-        + '<div class="slots">' + hid.join("") + '</div></details>' : "") + '</div>';
+    /* 6枠目の位置に「＋」だけのボタン。押すと 6〜9 枠が開く（もう一度押すと閉じる） */
+    if(hid.length){
+      vis.push('<button type="button" class="slot slotmore" data-t="slots-more" aria-label="さらに枠を増やす">' + icon("plus") + '</button>');
+      hid.forEach(function(c){ vis.push(c.replace('class="slot', 'class="slot xmore"')); });
+    }
+    return '<div class="slots">' + vis.join("") + '</div>';
   }
   /* 1日分の宿題を決める欄。翌日以降が未決定なら「いつも出す」を最初のチェックにする */
   function dayPane(Dx, pane, label){
     var onDay = {};
     Dx.items.forEach(function(it){ onDay[it.slot] = it.name; });
-    var note = Dx.hasDay ? '' : (Dx.date !== Dx.today
-      ? '<p class="note">未決定です。「いつも出す」にチェックを付けています。決定するとこの日の表が作られます。</p>'
-      : '<p class="note">この日はまだ集計に入っていません（まだ印が付いていない日）。</p>');
     return '<div class="sec" data-pane="' + pane + '" data-label="' + esc(label) + '"><h2>' + icon("calendar") + label + 'の宿題（'
-      + esc(dateLabel(Dx.date, Dx.wd)) + '）</h2>' + note
+      + esc(dateLabel(Dx.date, Dx.wd)) + '）</h2>'
       + slotGrid(Dx.slots, onDay, !Dx.hasDay && Dx.date !== Dx.today, "data-pslot", "data-pslotname")
-      + '<div class="line"><button class="btn primary" data-t="save-pane" data-saveof="' + pane + '">' + icon("save") + label + 'の宿題を決定</button>'
-      + '<span class="note">全部はずして決定すると「提出物なし」の日になります。</span></div></div>';
+      + '<div class="line"><button class="btn primary" data-t="save-pane" data-saveof="' + pane + '">' + icon("save") + label + 'の宿題を決定</button></div></div>';
   }
   /* 今日の未提出者。○でも休でもないマス（免除は除く）が残っている児童 */
   function missingHtml(){
@@ -168,11 +167,8 @@ var Teacher = (function(){
       + '</div></div>';
 
     h += '<div class="sec"><h2>' + icon("paper") + 'この日の提出物</h2>'
-      + (D.hasDay ? '' : '<p class="note">この日はまだ集計に入っていません（まだ印が付いていない日）。決定すると集計に入ります。</p>')
-      + '<p class="note">チェックを付けた品目がこの日の表に並びます。名前はこの日だけ変えられます（普段の名前は「名簿と品目」で）。</p>'
       + slotGrid(D.slots, onDay, false, "data-slot", "data-slotname")
-      + '<div class="line"><button class="btn primary" data-t="save-day">' + icon("save") + 'この日の提出物を決定</button>'
-      + '<span class="note">全部はずして決定すると「提出物なし」の日になります。</span></div></div>';
+      + '<div class="line"><button class="btn primary" data-t="save-day">' + icon("save") + 'この日の提出物を決定</button></div></div>';
 
     var abs = {}; D.absent.forEach(function(n){ abs[n] = true; });
     h += '<div class="sec"><h2>' + icon("bed") + '欠席</h2>'
@@ -387,11 +383,11 @@ var Teacher = (function(){
     h += '<div class="sec"><h2>' + icon("paper") + '品目の枠</h2>'
       + '<p class="note">「いつも出す」にした品目が毎日の既定の品目になります。その日だけ変えるときは「今日の表」で。'
       + '「列の色」を決めると、係の画面でその品目の列がその色になります。</p>'
-      + '<div style="overflow-x:auto"><table class="tbl"><thead>' + slHead + '</thead><tbody>'
-      + slVis.map(slRow).join("") + '</tbody></table>'
-      + (slHid.length ? '<details class="fold"><summary>' + icon("plus") + 'さらに枠を増やす（6〜9）</summary>'
-        + '<table class="tbl"><thead>' + slHead + '</thead><tbody>' + slHid.map(slRow).join("") + '</tbody></table></details>' : "")
-      + '</div>'
+      + '<div style="overflow-x:auto"><table class="tbl slottbl"><thead>' + slHead + '</thead><tbody>'
+      + slVis.map(slRow).join("")
+      + (slHid.length ? '<tr class="slotmore-r"><td colspan="5"><button type="button" class="slotmore" data-t="slots-more" aria-label="さらに枠を増やす">' + icon("plus") + '</button></td></tr>'
+        + slHid.map(function(s){ return slRow(s).replace('<tr ', '<tr class="xmore" '); }).join("") : "")
+      + '</tbody></table></div>'
       + '<div class="line"><button class="btn primary" data-t="sl-save">' + icon("save") + '品目を保存</button></div></div>';
 
     var hp = SU.helpers || [];
@@ -491,6 +487,7 @@ var Teacher = (function(){
     if(t === "save-day") return saveDay();
     if(t === "save-pane") return savePane(b.getAttribute("data-saveof"), b);
     if(t === "home-re") return loadHome();
+    if(t === "slots-more"){ var g = b.closest(".slots, table"); if(g) g.classList.toggle("xopen"); return; }
     if(t === "save-abs") return saveAbs();
     if(t === "stats-run") return loadStats($("#st-from").value, $("#st-to").value);
     if(t === "ex-add"){
