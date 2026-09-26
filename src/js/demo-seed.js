@@ -9,7 +9,12 @@ function demoSeed(){
     "にしだ あかり", "ぬまた こうき", "のむら ことね", "はしもと そら", "ひらの ゆづき",
     "ふじい しょう", "ほんだ まな", "まつもと だいち", "みやざき えま", "むらかみ はる",
     "もりた あんな", "やまだ ゆうま", "よしだ かのん"];
-  P.replace("名簿", names.map(function(n, i){ return [i + 1, n]; }));
+  /* 名簿の並びは本物と同じ メアド,学年,組,番号,氏名。メアドはデモ用の架空のもの */
+  P.replace("名簿", names.map(function(n, i){
+    return ["90" + ("000000" + (i + 1)).slice(-6) + "@kyoiku.edu.nishi.or.jp", 3, 1, i + 1, n];
+  }));
+  P.replace("係", [["90000002@kyoiku.edu.nishi.or.jp", Domain.termEnd(Domain.jstDate(P.now())), "デモ"],
+                   ["90000019@kyoiku.edu.nishi.or.jp", Domain.termEnd(Domain.jstDate(P.now())), ""]]);
 
   var seed = 7;
   function rnd(){ seed = (seed * 1103515245 + 12345) % 2147483648; return seed / 2147483648; }

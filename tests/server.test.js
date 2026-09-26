@@ -174,8 +174,14 @@ console.log("■ 先生が品目・名簿・過去の日を直す");
   ok("直す前の係の印は残らない（セル上書き）", s.P.rows("記録").filter(r => r[0] === "2026-09-24" && r[1] === "2")[0][2] === "*忘");
   ok("8日より前は直せない", (s.apiMark([{id:"ev-past-02", date:"2026-09-10", no:1, slot:1, op:"on"}]), !s.P.rows("記録").some(r => r[0] === "2026-09-10")));
 
-  const su = s.apiSaveRoster([{no:2, name:"いし"}, {no:1, name:"あお"}, {no:1, name:"だぶり"}, {no:0, name:"x"}]);
+  /* 名簿は「名簿」シートが正本（サイトでは編集しない）。算数TA式の列と旧式の両方を読む */
+  s.P.replace("名簿", [["12345678@kyoiku.edu.nishi.or.jp", 3, 1, 2, "いし"],
+                       [1, "あお"],
+                       ["87654321@kyoiku.edu.nishi.or.jp", 3, 1, 1, "だぶり"],
+                       [0, "x"]]);
+  const su = s.apiSetup();
   ok("名簿は番号順・重複と0番を捨てる", su.roster.map(r => r.no).join() === "1,2", su.roster);
+  ok("メアド列つきの行はメアドを持つ", su.roster[1].email === "12345678@kyoiku.edu.nishi.or.jp" && su.roster[0].email === "", su.roster);
   const sl = s.apiSaveSlots([{slot:1, name:"漢字", icon:"book", daily:true}, {slot:2, name:"", icon:"calc", daily:true}, {slot:3, icon:"evil"}]);
   ok("名前の無い枠は「いつも出す」にしない", sl.slots[1].daily === false && sl.slots[0].daily === true, sl.slots.slice(0, 2));
   ok("知らないアイコンは既定に戻す", sl.slots[2].icon === "note", sl.slots[2]);
@@ -227,7 +233,8 @@ console.log("■ 関門（アカウントで役を分ける）");
 {
   const s = load({gate:true});
   s.P._reset(); s.P._setNow(T0);
-  s.P.replace("名簿", [[1, "あお"], [2, "いし"]]);
+  s.P.replace("名簿", [["12345678@kyoiku.edu.nishi.or.jp", 3, 1, 1, "あお"],
+                       ["87654321@kyoiku.edu.nishi.or.jp", 3, 1, 2, "いし"]]);
   const as = (e, fn) => { s.EMAIL = e; return throws(fn); };
   const KID = "12345678@kyoiku.edu.nishi.or.jp", KID2 = "87654321@kyoiku.edu.nishi.or.jp";
   const SEN = "tanaka@edu.nishi.or.jp";
@@ -238,12 +245,12 @@ console.log("■ 関門（アカウントで役を分ける）");
   ok("末尾だけ似たドメインは通さない", !!as("a@xedu.nishi.or.jp", () => s.apiToday()));
   ok("教職員は通る", as(SEN, () => s.apiToday()) === null);
   s.EMAIL = SEN;
-  s.apiSaveHelpers([{email:KID, until:"", memo:""}]);
-  ok("登録した係の児童は係の画面を開ける", as(KID, () => s.apiToday()) === null);
+  s.apiSaveHelpers([1]);
+  ok("名簿の番号で選んだ係の児童は係の画面を開ける", as(KID, () => s.apiToday()) === null);
   ok("登録していない児童は開けない", !!as(KID2, () => s.apiToday()));
   ["apiSetup", "apiStats", "apiLogs", "apiTeacherDay"].forEach(f =>
     ok("係の児童は " + f + " を呼べない", /先生のアカウント/.test(as(KID, () => s[f]()) || "")));
-  ok("係の児童は名簿を書きかえられない", !!as(KID, () => s.apiSaveRoster([{no:1, name:"x"}])) && s.P.rows("名簿").length === 2);
+  ok("係の児童は係の指定を変えられない", !!as(KID, () => s.apiSaveHelpers([2])) && !s.P.rows("係").some(r => r[0] === KID2));
   s.EMAIL = KID;
   s.apiMark([{id:"kid-00001", date:"2026-09-25", no:1, slot:1, op:"on", at:T0, via:"teacher"}]);
   ok("係の児童の印は先生の印にならない", s.P.rows("記録")[0][2] === "○ 8:30", s.P.rows("記録")[0]);
@@ -286,26 +293,31 @@ console.log("■ 係の期限は学期末が上限");
   const s = load({gate:true});
   s.P._reset(); s.P._setNow(T0);
   s.EMAIL = "tanaka@edu.nishi.or.jp";
-  const r = s.apiSaveHelpers([{email:"12345678@kyoiku.edu.nishi.or.jp", until:"", memo:""},
-                                  {email:"87654321@kyoiku.edu.nishi.or.jp", until:"2026-10-15", memo:""},
-                                  {email:"55555555@kyoiku.edu.nishi.or.jp", until:"2027-06-30", memo:"学期末を越える"},
-                                  {email:"not-an-email", until:"", memo:""}]);
-  ok("空なら学期末（12/31）が入る", r.helpers[0].until === "2026-12-31", r.helpers);
-  ok("早い期限はそのまま", r.helpers[1].until === "2026-10-15");
-  ok("学期末より後は学期末に切る", r.helpers[2].until === "2026-12-31");
-  ok("メールの形でない行は捨てる", r.helpers.length === 3, r.helpers);
-  ok("シートにも同じ期限が書かれる", s.P.rows("係")[0][1] === "2026-12-31", s.P.rows("係"));
+  s.P.replace("名簿", [["12345678@kyoiku.edu.nishi.or.jp", 3, 1, 1, "あお"],
+                       ["87654321@kyoiku.edu.nishi.or.jp", 3, 1, 2, "いし"],
+                       ["55555555@kyoiku.edu.nishi.or.jp", 3, 1, 3, "うえ"],
+                       [4, "めあどなし"]]);
+  s.P.replace("係", [["12345678@kyoiku.edu.nishi.or.jp", "2026-10-15", "引き継ぎメモ"]]);
+  const r = s.apiSaveHelpers([1, 2, 4, 9]);                    // 4=メアド無し、9=名簿外
+  ok("名簿の番号で係を選ぶ（メアド無し・名簿外は選べない）", r.helpers.length === 2, r.helpers);
+  ok("シートには名簿のメアドが書かれる", s.P.rows("係").every(x => String(x[0]).indexOf("@") > 0), s.P.rows("係"));
+  ok("すでに係の子は期限とメモが残る", r.helpers[0].until === "2026-10-15" && s.P.rows("係").some(x => x[2] === "引き継ぎメモ"), r.helpers);
+  ok("新しく選んだ子の期限は学期末が上限", r.helpers[1].until === "2026-12-31", r.helpers);
+  const rr = s.apiSaveHelpers([1, 3], "2026-10-20");
+  ok("新しく選んだ子には早い期限を入れられる", rr.helpers[1].until === "2026-10-20", rr.helpers);
+  ok("すでに係の子は指定の日付に変わらない", rr.helpers[0].until === "2026-10-15", rr.helpers);
 
-  s.EMAIL = "12345678@kyoiku.edu.nishi.or.jp";
+  s.apiSaveHelpers([2]);                                       // 2番（学期末まで）で切替を試す
+  s.EMAIL = "87654321@kyoiku.edu.nishi.or.jp";
   s.P._setNow(JST("2026-12-31", "20:00"));       /* 日本時間 12/31 */
   ok("学期末当日は開ける", s.Gate.who().role === "helper");
   s.P._setNow(JST("2027-01-01", "08:00"));       /* 日本時間 1/1 */
   ok("学期を越えると失効する", s.Gate.who().role === "none" && !!throws(() => s.apiToday()));
 
   s.EMAIL = "tanaka@edu.nishi.or.jp";
-  const r2 = s.apiSaveHelpers([{email:"12345678@kyoiku.edu.nishi.or.jp", until:"", memo:""}]);
-  ok("新学期に保存し直すと次の学期末になる", r2.helpers[0].until === "2027-03-31", r2.helpers);
-  s.EMAIL = "12345678@kyoiku.edu.nishi.or.jp";
+  const r2 = s.apiSaveHelpers([3]);
+  ok("新学期に保存し直すと次の学期末になる（期限切れは延びる）", r2.helpers[0].until === "2027-03-31", r2.helpers);
+  s.EMAIL = "55555555@kyoiku.edu.nishi.or.jp";
   ok("再登録すれば開ける", s.Gate.who().role === "helper");
 }
 
@@ -313,9 +325,10 @@ console.log("■ 係の画面は 8:00〜14:00（日本時間）だけ");
 {
   const s = load({gate:true});
   s.P._reset(); s.P._setNow(JST("2026-09-25", "07:30"));
-  s.P.replace("名簿", [[1, "あお"], [2, "いし"]]);
+  s.P.replace("名簿", [["12345678@kyoiku.edu.nishi.or.jp", 3, 1, 1, "あお"],
+                       [2, "いし"]]);
   s.EMAIL = "tanaka@edu.nishi.or.jp";
-  s.apiSaveHelpers([{email:"12345678@kyoiku.edu.nishi.or.jp", until:"", memo:""}]);
+  s.apiSaveHelpers([1]);
   const KID = "12345678@kyoiku.edu.nishi.or.jp";
 
   s.EMAIL = KID;

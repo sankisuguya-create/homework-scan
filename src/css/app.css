@@ -42,6 +42,10 @@ button{cursor:pointer;touch-action:manipulation}
 .btn.warn{background:var(--warn)}
 .btn.small{min-height:44px;font-size:18px;padding:4px 14px;border-width:2px}
 .btn:disabled{opacity:1;background:var(--soft);color:var(--sub);border-style:dashed;cursor:default}
+.btn:active{transform:translateY(2px) scale(.97)}
+.btn.busy{opacity:.85;cursor:wait;transform:none}
+.btn.busy .ic{animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
 .btn.big{min-height:88px;font-size:32px;padding:12px 40px}
 
 /* ================= 係の画面 ================= */

@@ -10,15 +10,21 @@
 ================================================================== */
 var Teacher = (function(){
   var root = null, opts = {}, tab = "home", active = false;
-  var D = null, SU = null, ST = null, date = "", sortBy = "no", roster = null, logs = null;
+  var D = null, SU = null, ST = null, date = "", sortBy = "no", logs = null;
   var H1 = null, H2 = null;   /* きょうとあした：H1=きょう（休日なら次の登校日）、H2=その次の登校日 */
   var bgTheme = "grad";       /* 先生の画面の背景（この端末だけに効く） */
   var TABS = [["home", "paper", "今日と明日"], ["day", "calendar", "今日の表"], ["stats", "chart", "分析"],
               ["exempt", "shield", "免除"], ["roster", "users", "名簿と品目"], ["settings", "gear", "設定"]];
 
-  /* サーバを呼び、失敗したら知らせる */
+  /* サーバを呼び、失敗したら知らせる。押したボタンがあれば処理中の見た目にする */
+  var busyBtn = null, busyHtml = "";
   function tcall(name){
-    return call.apply(null, arguments).catch(function(err){ toast(errText(err), true); throw err; });
+    var b = busyBtn, keep = b ? b.innerHTML : "";
+    if(b){ b.disabled = true; b.classList.add("busy"); b.innerHTML = icon("sync") + "処理中…"; }
+    return call.apply(null, arguments).catch(function(err){
+      if(b && b.isConnected){ b.disabled = false; b.classList.remove("busy"); b.innerHTML = keep; }
+      toast(errText(err), true); throw err;
+    });
   }
 
   function back(){ if(opts.back) opts.back(); }
@@ -64,7 +70,7 @@ var Teacher = (function(){
   }
   function loadSetup(){
     loading();
-    return tcall("apiSetup").then(function(r){ SU = r; roster = null; show(); });
+    return tcall("apiSetup").then(function(r){ SU = r; show(); });
   }
   function loadStats(from, to){
     loading();
@@ -348,22 +354,18 @@ var Teacher = (function(){
 
   /* ────────── 名簿と品目 ────────── */
   function rosterHtml(){
-    var list = roster || SU.roster;
+    var list = SU.roster;
     var h = '<div class="sec"><h2>' + icon("users") + '名簿（' + list.length + '人）</h2>'
+      + '<p class="note">名簿はスプレッドシートの「名簿」シートを直接編集します（この画面では直せません）。'
+      + '列の並びは「メールアドレス・学年・組・番号・氏名」（算数タイムアタックと同じ）です。'
+      + (SU.sheetUrl ? '<a href="' + esc(SU.sheetUrl) + '" target="_blank" rel="noopener">スプレッドシートを開く</a>' : '') + '</p>'
       + '<p class="note">係の画面では、1〜18番が左、19番以降が右に並びます。</p>'
-      + '<div class="line" style="align-items:flex-start"><div style="overflow-x:auto"><table class="tbl"><thead><tr><th class="num">番号</th><th>氏名</th><th></th></tr></thead><tbody>'
-      + (list.length ? list.map(function(r, i){
-          return '<tr data-ro="' + i + '"><td><input type="number" min="1" max="99" data-f="no" value="' + r.no + '" style="width:5em"></td>'
-            + '<td><input type="text" maxlength="40" data-f="name" value="' + esc(r.name) + '"></td>'
-            + '<td><button class="btn small" data-t="ro-del" data-i="' + i + '">' + icon("trash") + '削除</button></td></tr>';
-        }).join("") : '<tr><td colspan="3">まだありません</td></tr>')
-      + '</tbody></table></div>'
-      + '<div class="sec" style="flex:1;min-width:300px"><label class="field">' + icon("paste") + ' 元の名簿から範囲コピーして貼り付け（行の数字列が番号、はじめの文字列の列が氏名。余分な列は読み飛ばします）'
-      + '<textarea id="ro-paste" placeholder="1&#9;あおき はると&#10;2&#9;いしかわ めい"></textarea></label>'
-      + '<div class="line"><button class="btn" data-t="ro-read">' + icon("paste") + '貼り付けた名簿を読み込む</button></div></div></div>'
-      + '<div class="line"><button class="btn" data-t="ro-add">' + icon("plus") + '1人追加</button>'
-      + '<button class="btn primary" data-t="ro-save">' + icon("save") + '名簿を保存</button>'
-      + (roster ? '<span class="mk flag">' + icon("alert") + ' まだ保存していません</span>' : '') + '</div></div>';
+      + '<div style="overflow-x:auto"><table class="tbl"><thead><tr><th class="num">番号</th><th>氏名</th><th>メールアドレス</th></tr></thead><tbody>'
+      + (list.length ? list.map(function(r){
+          return '<tr><td class="num">' + r.no + '</td><td>' + esc(r.name) + '</td>'
+            + '<td>' + (r.email ? esc(r.email) : '<span style="color:var(--warn)">（なし）</span>') + '</td></tr>';
+        }).join("") : '<tr><td colspan="3">まだありません。「名簿」シートに貼り付けてください</td></tr>')
+      + '</tbody></table></div></div>';
 
     /* 品目の枠は全部で9つ。既定は5枠まで表示し、名前の無い6〜9は畳む */
     var slHead = '<tr><th class="num">枠</th><th>名前</th><th>アイコン</th><th>列の色</th><th>いつも出す</th></tr>';
@@ -390,33 +392,31 @@ var Teacher = (function(){
       + '</tbody></table></div>'
       + '<div class="line"><button class="btn primary" data-t="sl-save">' + icon("save") + '品目を保存</button></div></div>';
 
-    var hp = SU.helpers || [];
-    h += '<div class="sec"><h2>' + icon("hand") + '係の画面を開ける児童（' + hp.length + '人）</h2>'
-      + '<p class="note">ここに登録した児童は、自分のアドレスでこのアプリを開くと係の画面（今日の入力）だけが見えます。'
-      + '先生の画面にはどの方法でも入れません。期限は学期末（3月・8月・12月）で自動的に切れます。'
-      + 'それより早く終わらせたい場合だけ日付を入れてください。</p>'
-      + '<div style="overflow-x:auto"><table class="tbl"><thead><tr><th>メールアドレス</th><th>期限</th><th>メモ</th><th></th></tr></thead><tbody>'
-      + (hp.length ? hp.map(function(x, i){
-          return '<tr data-hp="' + i + '"' + (x.active ? '' : ' style="opacity:.55"') + '><td><input type="email" data-f="email" value="' + esc(x.email) + '" style="width:22em"></td>'
-            + '<td><input type="date" data-f="until" value="' + esc(x.until) + '"></td>'
-            + '<td><input type="text" data-f="memo" maxlength="60" value="' + esc(x.memo) + '" style="width:14em"></td>'
-            + '<td><button class="btn small" data-t="hp-del" data-i="' + i + '">' + icon("trash") + '削除</button></td></tr>';
-        }).join("") : '<tr><td colspan="4">まだありません</td></tr>')
-      + '</tbody></table></div><div class="line">'
-      + '<button class="btn" data-t="hp-add">' + icon("plus") + '1人追加</button>'
-      + '<button class="btn primary" data-t="hp-save">' + icon("save") + '係を保存</button></div></div>';
-    return h;
-  }
-  function readRosterTable(){
-    return $$("[data-ro]", root).map(function(tr){
-      return {no:Number($('[data-f="no"]', tr).value), name:$('[data-f="name"]', tr).value.trim()};
+    /* 係の指定は名簿の名前を押して選ぶ。メアドが名簿に無い児童は選べない
+       （係は自分のアドレスで開くので、アドレスが無いと開けない）。
+       係シートにあって名簿に無いアドレスは、保存すると消えるので先に見せる */
+    var hp = SU.helpers || [], hpMail = {}, stray = [];
+    hp.forEach(function(x){ hpMail[x.email] = x; });
+    var hpc = list.map(function(r){
+      var x = r.email && hpMail[r.email];
+      if(x) x._hit = true;
+      return r;
     });
-  }
-  function readHelpersTable(){
-    return $$("[data-hp]", root).map(function(tr){
-      return {email:$('[data-f="email"]', tr).value.trim(), until:$('[data-f="until"]', tr).value,
-              memo:$('[data-f="memo"]', tr).value.trim()};
-    }).filter(function(h){ return h.email; });
+    hp.forEach(function(x){ if(!x._hit) stray.push(x); });
+    h += '<div class="sec"><h2>' + icon("hand") + '係の画面を開ける児童（' + hp.filter(function(x){ return x._hit; }).length + '人）</h2>'
+      + '<p class="note">選んだ児童は、自分のアドレスでこのアプリを開くと係の画面（今日の入力）だけが見えます。'
+      + '期限は学期末（3月・8月・12月）で自動的に切れます。すでに係の児童は今の期限のままです。</p>'
+      + (stray.length ? '<p class="note">' + icon("alert") + ' 名簿に無い登録（保存すると消えます）：'
+          + stray.map(function(x){ return esc(x.email); }).join("、") + '</p>' : "")
+      + '<div class="chips">'
+      + hpc.map(function(r){
+          var on = !!(r.email && hpMail[r.email] && hpMail[r.email].active);
+          return '<button class="pick" data-hpc="' + r.no + '" aria-pressed="' + on + '"'
+            + (r.email ? '' : ' disabled') + '>' + r.no + ' ' + esc(r.name) + '</button>';
+        }).join("") + '</div>'
+      + '<div class="line"><label class="field">新しく選ぶ児童の期限（空欄＝学期末）<input type="date" id="hp-until"></label></div>'
+      + '<div class="line"><button class="btn primary" data-t="hp-save">' + icon("save") + '係を保存</button></div></div>';
+    return h;
   }
 
   /* ────────── 設定 ────────── */
@@ -457,6 +457,8 @@ var Teacher = (function(){
       pk.innerHTML = (on ? icon("bed") : "") + pk.textContent;
       return;
     }
+    var hc = e.target.closest("[data-hpc]");   /* 係の指定：名簿の名前チップ */
+    if(hc){ if(!hc.disabled) hc.setAttribute("aria-pressed", hc.getAttribute("aria-pressed") !== "true"); return; }
     var ic = e.target.closest("[data-icon]");
     if(ic){
       $$("[data-icon]", ic.closest("td")).forEach(function(b){ b.setAttribute("aria-pressed", b === ic); });
@@ -479,7 +481,10 @@ var Teacher = (function(){
     if(cl){ tapCell(cl.getAttribute("data-cell")); return; }
     var b = e.target.closest("[data-t]");
     if(!b || b.disabled) return;
-    var t = b.getAttribute("data-t");
+    busyBtn = b;   /* tcall がここからボタンを拾って「処理中…」にする */
+    try{ act(b.getAttribute("data-t"), b); } finally { busyBtn = null; }
+  }
+  function act(t, b){
     if(t === "back") return back();
     if(t === "prev") return loadDay(Domain.addDays(D.date, -1));
     if(t === "next") return loadDay(Domain.addDays(D.date, 1));
@@ -497,29 +502,12 @@ var Teacher = (function(){
     }
     if(t === "ex-del"){ SU.exemptions = readExempt(); SU.exemptions.splice(Number(b.getAttribute("data-i")), 1); return show(); }
     if(t === "ex-save") return tcall("apiSaveExemptions", readExempt()).then(function(r){ SU = r; ST = null; D = null; show(); toast("免除を保存しました"); });
-    if(t === "ro-add"){
-      roster = readRosterTable();
-      var max = roster.reduce(function(m, r){ return Math.max(m, r.no || 0); }, 0);
-      roster.push({no:max + 1, name:""});
-      return show();
+    if(t === "hp-save"){
+      var nos = $$("[data-hpc]", root).filter(function(c){ return c.getAttribute("aria-pressed") === "true"; })
+        .map(function(c){ return Number(c.getAttribute("data-hpc")); });
+      var until = $("#hp-until") ? $("#hp-until").value : "";
+      return tcall("apiSaveHelpers", nos, until).then(function(r){ SU = r; D = null; ST = null; show(); toast("係を保存しました"); });
     }
-    if(t === "ro-del"){ roster = readRosterTable(); roster.splice(Number(b.getAttribute("data-i")), 1); return show(); }
-    if(t === "ro-read"){
-      var got = Domain.parseRoster($("#ro-paste").value);
-      if(!got.length){ toast("名簿を読み込めませんでした", true); return; }
-      roster = got; show(); toast(got.length + "人を読み込みました。「名簿を保存」で確定します"); return;
-    }
-    if(t === "ro-save"){
-      var list = readRosterTable();
-      var bad = list.filter(function(r){ return !r.name || !(r.no >= 1 && r.no <= 99); });
-      if(bad.length){ toast("番号か氏名が空の行があります", true); return; }
-      var seen = {}, dup = list.filter(function(r){ if(seen[r.no]) return true; seen[r.no] = 1; return false; });
-      if(dup.length){ toast(dup[0].no + "番が重複しています", true); return; }
-      return tcall("apiSaveRoster", list).then(function(r){ SU = r; roster = null; D = null; ST = null; show(); toast("名簿を保存しました"); });
-    }
-    if(t === "hp-add"){ SU.helpers = readHelpersTable(); SU.helpers.push({email:"", until:"", memo:"", active:true}); return show(); }
-    if(t === "hp-del"){ SU.helpers = readHelpersTable(); SU.helpers.splice(Number(b.getAttribute("data-i")), 1); return show(); }
-    if(t === "hp-save") return tcall("apiSaveHelpers", readHelpersTable()).then(function(r){ SU = r; show(); toast("係を保存しました"); });
     if(t === "sl-save"){
       var slots = $$("[data-sl]", root).map(function(tr){
         var p = $('[data-icon][aria-pressed="true"]', tr);
@@ -550,7 +538,7 @@ var Teacher = (function(){
 
   function mount(el, o){
     root = el; opts = o || {}; active = true;
-    tab = "home"; D = SU = ST = null; H1 = H2 = null; roster = null; logs = null; date = "";
+    tab = "home"; D = SU = ST = null; H1 = H2 = null; logs = null; date = "";
     try{ bgTheme = localStorage.getItem("hs-bg") || "grad"; }catch(ignored){ bgTheme = "grad"; }
     show();
   }
