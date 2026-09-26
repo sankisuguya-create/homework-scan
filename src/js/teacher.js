@@ -10,7 +10,8 @@
 var Teacher = (function(){
   var root = null, opts = {}, tab = "home", active = false;
   var D = null, SU = null, ST = null, date = "", sortBy = "no", roster = null, logs = null;
-  var H1 = null, H2 = null;   /* きょうとあした：H1=きょう、H2=あした */
+  var H1 = null, H2 = null;   /* きょうとあした：H1=きょう（休日なら次の登校日）、H2=その次の登校日 */
+  var bgTheme = "grad";       /* 先生の画面の背景（この端末だけに効く） */
   var TABS = [["home", "paper", "きょうとあした"], ["day", "calendar", "きょうの表"], ["stats", "chart", "分析"],
               ["exempt", "shield", "免除"], ["roster", "users", "名簿と品目"], ["settings", "gear", "せってい"]];
 
@@ -26,7 +27,7 @@ var Teacher = (function(){
       return '<button class="tab" role="tab" data-tab="' + x[0] + '" aria-selected="' + (tab === x[0]) + '">'
            + icon(x[1]) + x[2] + '</button>';
     }).join("");
-    root.innerHTML = '<div class="teacher">'
+    root.innerHTML = '<div class="teacher" data-bg="' + esc(bgTheme) + '">'
       + '<div class="tbar"><h1>' + icon("unlock") + '先生の画面</h1><div class="grow"></div>'
       + '<button class="btn" data-t="back">' + icon("back") + esc(opts.backLabel || "もどる") + '</button></div>'
       + '<div class="tabs" role="tablist">' + t + '</div>'
@@ -48,11 +49,16 @@ var Teacher = (function(){
     loading();
     return tcall("apiTeacherDay", d || "").then(function(r){ D = r; date = r.date; show(); });
   }
+  /* きょうとあした：土日はとばして、登校日どうしが続く（金曜→月曜）。
+     週末に開いたときは「きょう」欄に次の登校日が出る。 */
   function loadHome(){
     loading();
     return tcall("apiTeacherDay", "").then(function(r1){
-      H1 = r1;
-      return tcall("apiTeacherDay", Domain.addDays(r1.today, 1));
+      var d1 = Domain.schoolDay(r1.today);
+      if(d1 === r1.today){ H1 = r1; return null; }
+      return tcall("apiTeacherDay", d1).then(function(r){ H1 = r; });
+    }).then(function(){
+      return tcall("apiTeacherDay", Domain.nextSchoolDay(H1.date));
     }).then(function(r2){ H2 = r2; show(); });
   }
   function loadSetup(){
@@ -68,18 +74,32 @@ var Teacher = (function(){
      きょう・あしたの宿題を決める欄と、きょうの未提出者の一覧。
      未提出者が7人以上のときは、トグルで畳んでおく。 */
   function homeHtml(){
-    return dayPane(H1, "today", "きょう") + dayPane(H2, "tomorrow", "あした")
-      + '<div class="sec"><h2>' + icon("users") + 'きょうの 未提出</h2>' + missingHtml() + '</div>'
+    var l1 = H1.date === H1.today ? "きょう" : "つぎの登校日";
+    var l2 = H2.date === Domain.addDays(H1.today, 1) ? "あした" : "つぎの登校日";
+    return bgPickHtml()
+      + dayPane(H1, "today", l1) + dayPane(H2, "tomorrow", l2)
+      + '<div class="sec"><h2>' + icon("users") + 'きょうの 未提出</h2>'
+      + (H1.date === H1.today ? missingHtml()
+         : '<div class="empty-msg">きょうは 休みです（' + esc(dateLabel(H1.today, Domain.weekday(H1.today))) + '）。</div>')
+      + '</div>'
       + '<div class="line"><button class="btn" data-t="home-re">' + icon("sync") + 'いまの 状態に 更新</button></div>';
+  }
+  /* 背景の切り替え。この端末（ブラウザ）だけに効く */
+  function bgPickHtml(){
+    return '<div class="line" style="justify-content:flex-end;gap:8px"><span class="note">背景</span>'
+      + [["grad", "やわらか"], ["geo", "幾何学"], ["white", "白"]].map(function(b){
+          return '<button class="pick" data-bgv="' + b[0] + '" aria-pressed="' + (bgTheme === b[0])
+               + '" style="min-height:44px;min-width:60px;font-size:18px">' + b[1] + '</button>';
+        }).join("") + '</div>';
   }
   /* 1日分の宿題を決める欄。「あした」が未決定なら「いつも出す」を最初のチェックにする */
   function dayPane(Dx, pane, label){
     var onDay = {};
     Dx.items.forEach(function(it){ onDay[it.slot] = it.name; });
     var note = Dx.hasDay ? '' : (pane === "tomorrow"
-      ? '<p class="note">あしたは まだ 決まっていません。「いつも出す」の品目に チェックを付けています。決めると あしたの表が作られ、集計に入ります。</p>'
+      ? '<p class="note">この日は まだ 決まっていません。「いつも出す」の品目に チェックを付けています。決めると この日の表が作られ、集計に入ります。</p>'
       : '<p class="note">この日は まだ 集計に入っていません（まだ 印が 付いていない日）。</p>');
-    return '<div class="sec" data-pane="' + pane + '"><h2>' + icon("calendar") + label + 'の 宿題（'
+    return '<div class="sec" data-pane="' + pane + '" data-label="' + esc(label) + '"><h2>' + icon("calendar") + label + 'の 宿題（'
       + esc(dateLabel(Dx.date, Dx.wd)) + '）</h2>' + note
       + '<div class="slots">' + Dx.slots.map(function(s){
           var on = (s.slot in onDay) || (!Dx.hasDay && pane === "tomorrow" && s.daily && !!s.name);
@@ -120,7 +140,7 @@ var Teacher = (function(){
     tcall("apiSaveDay", Dx.date, items).then(function(r){
       if(pane === "today") H1 = r; else H2 = r;
       D = null; ST = null;
-      show(); toast((pane === "today" ? "きょう" : "あした") + "の 宿題を 決めました");
+      show(); toast((box.getAttribute("data-label") || "この日") + "の 宿題を 決めました");
     });
   }
 
@@ -436,6 +456,12 @@ var Teacher = (function(){
     }
     var nm = e.target.closest("[data-names]");
     if(nm){ $$("[data-names]", root).forEach(function(b){ b.setAttribute("aria-pressed", b === nm); }); return; }
+    var bg = e.target.closest("[data-bgv]");
+    if(bg){
+      bgTheme = bg.getAttribute("data-bgv");
+      try{ localStorage.setItem("hs-bg", bgTheme); }catch(ignored){}
+      show(); return;
+    }
     var cl = e.target.closest("[data-cell]");
     if(cl){ tapCell(cl.getAttribute("data-cell")); return; }
     var b = e.target.closest("[data-t]");
@@ -511,6 +537,7 @@ var Teacher = (function(){
   function mount(el, o){
     root = el; opts = o || {}; active = true;
     tab = "home"; D = SU = ST = null; H1 = H2 = null; roster = null; logs = null; date = "";
+    try{ bgTheme = localStorage.getItem("hs-bg") || "grad"; }catch(ignored){ bgTheme = "grad"; }
     show();
   }
   function unmount(){ active = false; }

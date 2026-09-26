@@ -15,6 +15,8 @@
    ・色だけで区別しない：状態は「アイコン＋文字（または形）＋色」で示す
    ・赤と緑の組み合わせを使わない。濃い青・黄・黒・白で組む
    ・文字は大きく。押せるものは高さ 56px 以上
+   ※ 先生の画面だけは別テーマ（すりガラス風・ピル型・背景切替）。
+     係の画面はこのファイル前半のフラットな見た目のまま。
 ================================================================== */
 :root{
   --ink:#000;          /* 文字・罫線 */
@@ -184,6 +186,47 @@ textarea{border:var(--thin);border-radius:6px;padding:10px;font-size:18px;width:
 .empty-msg{border:3px dashed var(--ink);border-radius:var(--r);padding:20px;font-size:22px;font-weight:700}
 
 /* ================= 最初の画面（係） ================= */
+
+/* ================= 先生の画面のテーマ：ガラス × ピル =================
+   .teacher の中だけで上書きするので、係（児童）の画面は変わらない。
+   背景は .teacher の data-bg で切り替え：grad=やわらか（既定）、
+   geo=幾何学、white=白。文字色はどの背景でも濃い紺（7:1 以上）。 */
+.teacher{--ink:#16213D;--done:#1D4ED8;--warn:#F59E0B;--soft:rgba(255,255,255,.5);--r:999px}
+.teacher[data-bg="grad"]{background:linear-gradient(135deg,#FDEEDD 0%,#EEF6F0 55%,#E8EEFB 100%);background-attachment:fixed}
+.teacher[data-bg="geo"]{background-color:#D9E4F5;
+  background-image:
+    linear-gradient(30deg,rgba(255,255,255,.45) 12%,transparent 12.5%,transparent 87%,rgba(255,255,255,.45) 87.5%),
+    linear-gradient(150deg,rgba(255,255,255,.45) 12%,transparent 12.5%,transparent 87%,rgba(255,255,255,.45) 87.5%),
+    linear-gradient(60deg,rgba(120,145,185,.18) 25%,transparent 25.5%,transparent 75%,rgba(120,145,185,.18) 75.5%),
+    linear-gradient(120deg,rgba(120,145,185,.18) 25%,transparent 25.5%,transparent 75%,rgba(120,145,185,.18) 75.5%);
+  background-size:90px 156px;background-position:0 0,0 0,45px 78px,45px 78px}
+.teacher[data-bg="white"]{background:#F1F3F8}
+.teacher .tbar{background:rgba(255,255,255,.55);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-bottom:1px solid rgba(255,255,255,.7);padding-left:16px}
+.teacher .tabs{gap:10px;padding:10px 14px;border-bottom:0;background:rgba(255,255,255,.25)}
+.teacher .tab{border-radius:999px;border:1px solid rgba(22,33,61,.28);background:rgba(255,255,255,.55);border-bottom:1px solid rgba(22,33,61,.28);padding:12px 22px}
+.teacher .tab[aria-selected="true"]{background:#16213D;color:#fff;border-color:#16213D}
+.teacher .tab[aria-selected="true"] .ic{color:#fff}
+.teacher .tbody{gap:18px;padding:18px 16px}
+.teacher .sec{background:rgba(255,255,255,.55);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,.7);border-radius:24px;padding:18px 22px;box-shadow:0 10px 30px rgba(22,33,61,.10)}
+.teacher .sec h2{border-bottom:0;padding-bottom:0}
+.teacher .btn{border-radius:999px;border:2px solid rgba(22,33,61,.35);background:rgba(255,255,255,.6)}
+.teacher .btn.primary{background:#1D4ED8;border-color:#1D4ED8;color:#fff}
+.teacher .btn.primary .ic{color:#fff}
+.teacher .pick{border-radius:999px;border:2px solid rgba(22,33,61,.3);background:rgba(255,255,255,.55)}
+.teacher .pick[aria-pressed="true"]{background:#16213D;color:#fff}
+.teacher .pick[aria-pressed="true"] .ic{color:#fff}
+.teacher .pick.t-blue,.teacher .pick.t-red,.teacher .pick.t-green{border:2px solid rgba(22,33,61,.3)}
+.teacher .fold>summary{border-radius:999px;border:2px solid rgba(22,33,61,.3);background:rgba(255,255,255,.6);padding:10px 20px;font-size:20px}
+.teacher .fold>summary::-webkit-details-marker{display:none}
+.teacher .slot{border-radius:16px;border:2px solid rgba(22,33,61,.16);background:rgba(255,255,255,.45)}
+.teacher .slot.on{border-color:#1D4ED8;background:rgba(29,78,216,.10)}
+.teacher .field input,.teacher .field select,.teacher .tbl input,.teacher .tbl select,.teacher .slot input[type="text"]{border-radius:12px;border:1.5px solid rgba(22,33,61,.3);background:rgba(255,255,255,.7)}
+.teacher .tbl{border-collapse:separate;border-spacing:0;border:1px solid rgba(22,33,61,.2);border-radius:14px;overflow:hidden;background:rgba(255,255,255,.6)}
+.teacher .tbl th,.teacher .tbl td{border:0;border-bottom:1px solid rgba(22,33,61,.14)}
+.teacher .tbl thead th{background:#16213D;color:#fff}
+.teacher .tbl tbody tr:last-child td,.teacher .tbl tbody tr:last-child th{border-bottom:0}
+.teacher .empty-msg{border-style:dashed;background:rgba(255,255,255,.5);border-radius:16px}
+.teacher .slot .box{border-radius:10px}
 </style>
 </head>
 <body>
@@ -268,6 +311,16 @@ var Domain = (function(){
   function weekday(date){
     var p = date.split("-").map(Number);
     return "日月火水木金土".charAt(new Date(Date.UTC(p[0], p[1] - 1, p[2])).getUTCDay());
+  }
+  /* 土日は宿題の対象外。date の翌日以降で最初の平日を返す（金→月、土→月、日→月） */
+  function nextSchoolDay(date){
+    var d = addDays(date, 1);
+    while(weekday(d) === "土" || weekday(d) === "日") d = addDays(d, 1);
+    return d;
+  }
+  /* date が平日ならそのまま、土日なら次の平日（月曜）に読み替える */
+  function schoolDay(date){
+    return (weekday(date) === "土" || weekday(date) === "日") ? nextSchoolDay(date) : date;
   }
 
   /* 係の画面を使える時間（日本時間）。平日の 8:00 から 14:00 まで。
@@ -529,6 +582,7 @@ var Domain = (function(){
     pad:pad, jstDate:jstDate, jstStamp:jstStamp, jstParts:jstParts,
     stampMinutes:stampMinutes, hhmm:hhmm, isDate:isDate, asDate:asDate, asStamp:asStamp,
     addDays:addDays, weekday:weekday, toInt:toInt, termEnd:termEnd,
+    nextSchoolDay:nextSchoolDay, schoolDay:schoolDay,
     OPEN:OPEN, openAt:openAt, ip4num:ip4num, ipAllowed:ipAllowed,
     isExempt:isExempt, finalMarks:finalMarks, dayView:dayView, dayDetail:dayDetail,
     stats:stats, parseRoster:parseRoster
@@ -975,7 +1029,8 @@ var Helper = (function(){
 var Teacher = (function(){
   var root = null, opts = {}, tab = "home", active = false;
   var D = null, SU = null, ST = null, date = "", sortBy = "no", roster = null, logs = null;
-  var H1 = null, H2 = null;   /* きょうとあした：H1=きょう、H2=あした */
+  var H1 = null, H2 = null;   /* きょうとあした：H1=きょう（休日なら次の登校日）、H2=その次の登校日 */
+  var bgTheme = "grad";       /* 先生の画面の背景（この端末だけに効く） */
   var TABS = [["home", "paper", "きょうとあした"], ["day", "calendar", "きょうの表"], ["stats", "chart", "分析"],
               ["exempt", "shield", "免除"], ["roster", "users", "名簿と品目"], ["settings", "gear", "せってい"]];
 
@@ -991,7 +1046,7 @@ var Teacher = (function(){
       return '<button class="tab" role="tab" data-tab="' + x[0] + '" aria-selected="' + (tab === x[0]) + '">'
            + icon(x[1]) + x[2] + '</button>';
     }).join("");
-    root.innerHTML = '<div class="teacher">'
+    root.innerHTML = '<div class="teacher" data-bg="' + esc(bgTheme) + '">'
       + '<div class="tbar"><h1>' + icon("unlock") + '先生の画面</h1><div class="grow"></div>'
       + '<button class="btn" data-t="back">' + icon("back") + esc(opts.backLabel || "もどる") + '</button></div>'
       + '<div class="tabs" role="tablist">' + t + '</div>'
@@ -1013,11 +1068,16 @@ var Teacher = (function(){
     loading();
     return tcall("apiTeacherDay", d || "").then(function(r){ D = r; date = r.date; show(); });
   }
+  /* きょうとあした：土日はとばして、登校日どうしが続く（金曜→月曜）。
+     週末に開いたときは「きょう」欄に次の登校日が出る。 */
   function loadHome(){
     loading();
     return tcall("apiTeacherDay", "").then(function(r1){
-      H1 = r1;
-      return tcall("apiTeacherDay", Domain.addDays(r1.today, 1));
+      var d1 = Domain.schoolDay(r1.today);
+      if(d1 === r1.today){ H1 = r1; return null; }
+      return tcall("apiTeacherDay", d1).then(function(r){ H1 = r; });
+    }).then(function(){
+      return tcall("apiTeacherDay", Domain.nextSchoolDay(H1.date));
     }).then(function(r2){ H2 = r2; show(); });
   }
   function loadSetup(){
@@ -1033,18 +1093,32 @@ var Teacher = (function(){
      きょう・あしたの宿題を決める欄と、きょうの未提出者の一覧。
      未提出者が7人以上のときは、トグルで畳んでおく。 */
   function homeHtml(){
-    return dayPane(H1, "today", "きょう") + dayPane(H2, "tomorrow", "あした")
-      + '<div class="sec"><h2>' + icon("users") + 'きょうの 未提出</h2>' + missingHtml() + '</div>'
+    var l1 = H1.date === H1.today ? "きょう" : "つぎの登校日";
+    var l2 = H2.date === Domain.addDays(H1.today, 1) ? "あした" : "つぎの登校日";
+    return bgPickHtml()
+      + dayPane(H1, "today", l1) + dayPane(H2, "tomorrow", l2)
+      + '<div class="sec"><h2>' + icon("users") + 'きょうの 未提出</h2>'
+      + (H1.date === H1.today ? missingHtml()
+         : '<div class="empty-msg">きょうは 休みです（' + esc(dateLabel(H1.today, Domain.weekday(H1.today))) + '）。</div>')
+      + '</div>'
       + '<div class="line"><button class="btn" data-t="home-re">' + icon("sync") + 'いまの 状態に 更新</button></div>';
+  }
+  /* 背景の切り替え。この端末（ブラウザ）だけに効く */
+  function bgPickHtml(){
+    return '<div class="line" style="justify-content:flex-end;gap:8px"><span class="note">背景</span>'
+      + [["grad", "やわらか"], ["geo", "幾何学"], ["white", "白"]].map(function(b){
+          return '<button class="pick" data-bgv="' + b[0] + '" aria-pressed="' + (bgTheme === b[0])
+               + '" style="min-height:44px;min-width:60px;font-size:18px">' + b[1] + '</button>';
+        }).join("") + '</div>';
   }
   /* 1日分の宿題を決める欄。「あした」が未決定なら「いつも出す」を最初のチェックにする */
   function dayPane(Dx, pane, label){
     var onDay = {};
     Dx.items.forEach(function(it){ onDay[it.slot] = it.name; });
     var note = Dx.hasDay ? '' : (pane === "tomorrow"
-      ? '<p class="note">あしたは まだ 決まっていません。「いつも出す」の品目に チェックを付けています。決めると あしたの表が作られ、集計に入ります。</p>'
+      ? '<p class="note">この日は まだ 決まっていません。「いつも出す」の品目に チェックを付けています。決めると この日の表が作られ、集計に入ります。</p>'
       : '<p class="note">この日は まだ 集計に入っていません（まだ 印が 付いていない日）。</p>');
-    return '<div class="sec" data-pane="' + pane + '"><h2>' + icon("calendar") + label + 'の 宿題（'
+    return '<div class="sec" data-pane="' + pane + '" data-label="' + esc(label) + '"><h2>' + icon("calendar") + label + 'の 宿題（'
       + esc(dateLabel(Dx.date, Dx.wd)) + '）</h2>' + note
       + '<div class="slots">' + Dx.slots.map(function(s){
           var on = (s.slot in onDay) || (!Dx.hasDay && pane === "tomorrow" && s.daily && !!s.name);
@@ -1085,7 +1159,7 @@ var Teacher = (function(){
     tcall("apiSaveDay", Dx.date, items).then(function(r){
       if(pane === "today") H1 = r; else H2 = r;
       D = null; ST = null;
-      show(); toast((pane === "today" ? "きょう" : "あした") + "の 宿題を 決めました");
+      show(); toast((box.getAttribute("data-label") || "この日") + "の 宿題を 決めました");
     });
   }
 
@@ -1401,6 +1475,12 @@ var Teacher = (function(){
     }
     var nm = e.target.closest("[data-names]");
     if(nm){ $$("[data-names]", root).forEach(function(b){ b.setAttribute("aria-pressed", b === nm); }); return; }
+    var bg = e.target.closest("[data-bgv]");
+    if(bg){
+      bgTheme = bg.getAttribute("data-bgv");
+      try{ localStorage.setItem("hs-bg", bgTheme); }catch(ignored){}
+      show(); return;
+    }
     var cl = e.target.closest("[data-cell]");
     if(cl){ tapCell(cl.getAttribute("data-cell")); return; }
     var b = e.target.closest("[data-t]");
@@ -1476,6 +1556,7 @@ var Teacher = (function(){
   function mount(el, o){
     root = el; opts = o || {}; active = true;
     tab = "home"; D = SU = ST = null; H1 = H2 = null; roster = null; logs = null; date = "";
+    try{ bgTheme = localStorage.getItem("hs-bg") || "grad"; }catch(ignored){ bgTheme = "grad"; }
     show();
   }
   function unmount(){ active = false; }
