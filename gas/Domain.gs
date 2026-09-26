@@ -75,6 +75,16 @@ var Domain = (function(){
     var p = date.split("-").map(Number);
     return "日月火水木金土".charAt(new Date(Date.UTC(p[0], p[1] - 1, p[2])).getUTCDay());
   }
+  /* 土日は宿題の対象外。date の翌日以降で最初の平日を返す（金→月、土→月、日→月） */
+  function nextSchoolDay(date){
+    var d = addDays(date, 1);
+    while(weekday(d) === "土" || weekday(d) === "日") d = addDays(d, 1);
+    return d;
+  }
+  /* date が平日ならそのまま、土日なら次の平日（月曜）に読み替える */
+  function schoolDay(date){
+    return (weekday(date) === "土" || weekday(date) === "日") ? nextSchoolDay(date) : date;
+  }
 
   /* 係の画面を使える時間（日本時間）。平日の 8:00 から 14:00 まで。
      土曜・日曜は終日「閉室中」。係の児童はこの間だけ見られる・書ける。
@@ -335,6 +345,7 @@ var Domain = (function(){
     pad:pad, jstDate:jstDate, jstStamp:jstStamp, jstParts:jstParts,
     stampMinutes:stampMinutes, hhmm:hhmm, isDate:isDate, asDate:asDate, asStamp:asStamp,
     addDays:addDays, weekday:weekday, toInt:toInt, termEnd:termEnd,
+    nextSchoolDay:nextSchoolDay, schoolDay:schoolDay,
     OPEN:OPEN, openAt:openAt, ip4num:ip4num, ipAllowed:ipAllowed,
     isExempt:isExempt, finalMarks:finalMarks, dayView:dayView, dayDetail:dayDetail,
     stats:stats, parseRoster:parseRoster

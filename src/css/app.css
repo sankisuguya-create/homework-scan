@@ -5,6 +5,8 @@
    ・色だけで区別しない：状態は「アイコン＋文字（または形）＋色」で示す
    ・赤と緑の組み合わせを使わない。濃い青・黄・黒・白で組む
    ・文字は大きく。押せるものは高さ 56px 以上
+   ※ 先生の画面だけは別テーマ（すりガラス風・ピル型・背景切替）。
+     係の画面はこのファイル前半のフラットな見た目のまま。
 ================================================================== */
 :root{
   --ink:#000;          /* 文字・罫線 */
@@ -174,3 +176,53 @@ textarea{border:var(--thin);border-radius:6px;padding:10px;font-size:18px;width:
 .empty-msg{border:3px dashed var(--ink);border-radius:var(--r);padding:20px;font-size:22px;font-weight:700}
 
 /* ================= 最初の画面（係） ================= */
+
+/* ================= 先生の画面のテーマ：ガラス × ピル =================
+   .teacher の中だけで上書きするので、係（児童）の画面は変わらない。
+   背景は .teacher の data-bg で切り替え：grad=やわらか（既定）、
+   geo=幾何学、white=白。文字色はどの背景でも濃い紺（7:1 以上）。 */
+.teacher{--ink:#16213D;--done:#1D4ED8;--warn:#F59E0B;--soft:rgba(255,255,255,.5);--r:999px}
+.teacher[data-bg="grad"]{background:linear-gradient(135deg,#FDEEDD 0%,#EEF6F0 55%,#E8EEFB 100%);background-attachment:fixed}
+.teacher[data-bg="geo"]{background-color:#D9E4F5;
+  background-image:
+    linear-gradient(30deg,rgba(255,255,255,.45) 12%,transparent 12.5%,transparent 87%,rgba(255,255,255,.45) 87.5%),
+    linear-gradient(150deg,rgba(255,255,255,.45) 12%,transparent 12.5%,transparent 87%,rgba(255,255,255,.45) 87.5%),
+    linear-gradient(60deg,rgba(120,145,185,.18) 25%,transparent 25.5%,transparent 75%,rgba(120,145,185,.18) 75.5%),
+    linear-gradient(120deg,rgba(120,145,185,.18) 25%,transparent 25.5%,transparent 75%,rgba(120,145,185,.18) 75.5%);
+  background-size:90px 156px;background-position:0 0,0 0,45px 78px,45px 78px}
+.teacher[data-bg="white"]{background:#F1F3F8}
+.teacher .tbar{background:rgba(255,255,255,.55);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-bottom:1px solid rgba(255,255,255,.7);padding-left:16px}
+.teacher .tabs{gap:10px;padding:10px 14px;border-bottom:0;background:rgba(255,255,255,.25)}
+.teacher .tab{border-radius:999px;border:1px solid rgba(22,33,61,.28);background:rgba(255,255,255,.55);border-bottom:1px solid rgba(22,33,61,.28);padding:12px 22px}
+.teacher .tab[aria-selected="true"]{background:#16213D;color:#fff;border-color:#16213D}
+.teacher .tab[aria-selected="true"] .ic{color:#fff}
+.teacher .tbody{gap:18px;padding:18px 16px}
+.teacher .sec{background:rgba(255,255,255,.55);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,.7);border-radius:24px;padding:18px 22px;box-shadow:0 10px 30px rgba(22,33,61,.10)}
+.teacher .sec h2{border-bottom:0;padding-bottom:0}
+.teacher .btn{border-radius:999px;border:2px solid rgba(22,33,61,.35);background:rgba(255,255,255,.6)}
+.teacher .btn.primary{background:#1D4ED8;border-color:#1D4ED8;color:#fff}
+.teacher .btn.primary .ic{color:#fff}
+.teacher .pick{border-radius:999px;border:2px solid rgba(22,33,61,.3);background:rgba(255,255,255,.55)}
+.teacher .pick[aria-pressed="true"]{background:#16213D;color:#fff}
+.teacher .pick[aria-pressed="true"] .ic{color:#fff}
+.teacher .pick.t-blue,.teacher .pick.t-red,.teacher .pick.t-green{border:2px solid rgba(22,33,61,.3)}
+.teacher .fold>summary{border-radius:999px;border:2px solid rgba(22,33,61,.3);background:rgba(255,255,255,.6);padding:10px 20px;font-size:20px}
+.teacher .fold>summary::-webkit-details-marker{display:none}
+.teacher .slot{border-radius:16px;border:2px solid rgba(22,33,61,.16);background:rgba(255,255,255,.45)}
+.teacher .slot.on{border-color:#1D4ED8;background:rgba(29,78,216,.10)}
+.teacher .field input,.teacher .field select,.teacher .tbl input,.teacher .tbl select,.teacher .slot input[type="text"]{border-radius:12px;border:1.5px solid rgba(22,33,61,.3);background:rgba(255,255,255,.7)}
+.teacher .tbl{border-collapse:separate;border-spacing:0;border:1px solid rgba(22,33,61,.2);border-radius:14px;overflow:hidden;background:rgba(255,255,255,.6)}
+.teacher .tbl th,.teacher .tbl td{border:0;border-bottom:1px solid rgba(22,33,61,.14)}
+.teacher .tbl thead th{background:#16213D;color:#fff}
+.teacher .tbl tbody tr:last-child td,.teacher .tbl tbody tr:last-child th{border-bottom:0}
+.teacher .empty-msg{border-style:dashed;background:rgba(255,255,255,.5);border-radius:16px}
+.teacher .slot .box{border-radius:10px}
+/* きょう=青系、つぎの登校日=緑系（ガラス感の中で色だけ変える） */
+.teacher .sec[data-pane="today"]{background:rgba(191,219,254,.5);border-color:rgba(29,78,216,.45)}
+.teacher .sec[data-pane="tomorrow"]{background:rgba(187,247,208,.5);border-color:rgba(21,128,61,.4)}
+.teacher .sec[data-pane="today"] .slot.on{border-color:#1D4ED8;background:rgba(29,78,216,.14)}
+.teacher .sec[data-pane="tomorrow"] .slot.on{border-color:#15803D;background:rgba(21,128,61,.12)}
+.teacher .sec[data-pane="tomorrow"] .btn.primary{background:#15803D;border-color:#15803D}
+.teacher .sec[data-pane="tomorrow"] .slot input[type="checkbox"]{accent-color:#15803D}
+/* 枠6〜9の折りたたみはグリッドいっぱいに広げる */
+.teacher .slots>.slotfold{grid-column:1/-1}
