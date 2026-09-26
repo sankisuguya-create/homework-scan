@@ -43,9 +43,9 @@ var ICON_PATHS = {
   paste:  '<rect x="6" y="4" width="12" height="17" rx="2"/><path d="M9 4V3h6v1M9 10h6M9 14h6"/>',
   clock:  '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>'
 };
-var ICON_LABEL = {book:"本", calc:"計算", note:"連絡帳", pencil:"えんぴつ", paper:"プリント",
+var ICON_LABEL = {book:"本", calc:"計算", note:"連絡帳", pencil:"鉛筆", paper:"プリント",
                   star:"星", music:"音楽", bag:"かばん", abc:"英語"};
-var COLOR_LABEL = {blue:"薄青", red:"薄赤", green:"薄緑"};
+var COLOR_LABEL = {blue:"薄い青", red:"薄い赤", green:"薄い緑"};
 function icon(name, cls){
   var p = ICON_PATHS[name] || ICON_PATHS.paper;
   return '<svg class="ic' + (cls ? " " + cls : "") + '" viewBox="0 0 24 24" aria-hidden="true" '

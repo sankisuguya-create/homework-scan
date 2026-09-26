@@ -224,3 +224,5 @@ textarea{border:var(--thin);border-radius:6px;padding:10px;font-size:18px;width:
 .teacher .sec[data-pane="tomorrow"] .slot.on{border-color:#15803D;background:rgba(21,128,61,.12)}
 .teacher .sec[data-pane="tomorrow"] .btn.primary{background:#15803D;border-color:#15803D}
 .teacher .sec[data-pane="tomorrow"] .slot input[type="checkbox"]{accent-color:#15803D}
+/* 枠6〜9の折りたたみはグリッドいっぱいに広げる */
+.teacher .slots>.slotfold{grid-column:1/-1}
