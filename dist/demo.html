@@ -102,6 +102,13 @@ button{cursor:pointer;touch-action:manipulation}
 .pick.t-green{background:var(--tg)}
 .pick.t-blue[aria-pressed="true"],.pick.t-red[aria-pressed="true"],.pick.t-green[aria-pressed="true"]{background:var(--ink);color:var(--paper)}
 .pane .who{display:flex;align-items:center;gap:10px;padding:0 10px;min-width:0}
+/* 名前のところはタップできるボタン（休み⇄出席の切替） */
+.pane button.who{border:0;background:transparent;font:inherit;color:var(--ink);text-align:left;cursor:pointer;width:100%;height:100%}
+.pane button.who:active{background:rgba(0,0,0,.06)}
+.pane .who .ab{background:var(--warn);color:var(--ink);border-radius:999px;padding:0 .5em;font-weight:800;font-size:clamp(12px,calc(var(--rh) * .5),26px);line-height:1.5}
+/* 休みの子：行を薄くし、マスは全部「休」と同じ色に */
+.pane .row.abs .who{color:var(--sub)}
+.pane .row.abs .cell{opacity:.65}
 .pane .no{font-size:clamp(14px,calc(var(--rh) * .62),34px);font-weight:800;min-width:1.6em;text-align:right;font-variant-numeric:tabular-nums}
 .pane .nm{font-size:clamp(12px,calc(var(--rh) * .5),26px);font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 /* マス。状態は「文字（○休忘△）＋色」で示す。色だけでは区別させない */
@@ -809,12 +816,15 @@ function helperState(ctx){
   var items = itemsFor(date, days, slots).items;
   var roster = ctx.roster || readRoster();
   var events = ctx.events || readEvents();
+  var absences = ctx.absences || readAbsences();
   var v = Domain.dayView({date:date, items:items, roster:roster, events:events,
-                          absences:readAbsences(), exemptions:readExemptions()});
+                          absences:absences, exemptions:readExemptions()});
   var st = ctx.settings || readSettings();
   return {date:date, wd:Domain.weekday(date), items:items,
           roster: roster.map(function(s){ return {no:s.no, name: st.showNames ? s.name : ""}; }),
-          cells:v.cells, excused:v.excused, now:P.now(), net:st.netIps || ""};
+          cells:v.cells, excused:v.excused,
+          absent: absences.filter(function(a){ return a.date === date; }).map(function(a){ return a.no; }),
+          now:P.now(), net:st.netIps || ""};
 }
 /* 係の画面を使えるのは 8:00〜14:00（日本時間）。閉じている間は closed を返す。
    先生（staff）はいつでも見られる。端末側でも同じ時刻で閉じるので、
@@ -853,13 +863,15 @@ function apiMark(events, sentAt){
   var rosterList = readRoster(), roster = {};
   rosterList.forEach(function(s){ roster[s.no] = true; });
   var slots = readSlots(), settings = readSettings();
-  var days = null;
+  var days = null, absRows = [];
   P.lock(function(){
     days = readDays();
     var recs = P.rows("記録");
     var recIdx = {};
     recs.forEach(function(r, i){ recIdx[Domain.asDate(r[0]) + "|" + Domain.toInt(r[1])] = i; });
     var dirty = {}, fresh = [];
+    var absDirty = false;
+    absRows = P.rows("欠席");
     list.forEach(function(e){
       if(!e || typeof e !== "object") return;
       var id = String(e.id || "");
@@ -869,6 +881,17 @@ function apiMark(events, sentAt){
       if(date !== date0 && !isTeacher) return;
       var no = Domain.toInt(e.no), slot = Domain.toInt(e.slot);
       if(!roster[no]) return;
+      /* 休みの切替：{abs:true}=休み、{abs:false}=出席に戻す（児童の名前セルのタップ）
+         書き換えるのは「欠席」シートだけ。マスの記録は残るので、戻すと元どおり見える */
+      if(e.abs === true || e.abs === false){
+        var ai = -1;
+        for(var z = 0; z < absRows.length; z++){
+          if(Domain.asDate(absRows[z][0]) === date && Domain.toInt(absRows[z][1]) === no){ ai = z; break; }
+        }
+        if(e.abs && ai < 0){ absRows.push([date, no]); absDirty = true; }
+        else if(!e.abs && ai >= 0){ absRows.splice(ai, 1); absDirty = true; }
+        return;
+      }
       var items = date === date0 ? (days[date] || dailyItems(slots)) : days[date];
       if(!items || !items.some(function(it){ return it.slot === slot; })) return;
       if(!OP[e.op]) return;
@@ -892,9 +915,13 @@ function apiMark(events, sentAt){
     });
     Object.keys(dirty).forEach(function(i){ P.put("記録", Number(i), recs[i]); });
     P.append("記録", fresh);
+    if(absDirty) P.replace("欠席", absRows);
   });
   return {processed:processed,
-          state:helperState({days:days, slots:slots, roster:rosterList, settings:settings})};
+          state:helperState({days:days, slots:slots, roster:rosterList, settings:settings,
+                             absences:absRows.map(function(r){
+                               return {date:Domain.asDate(r[0]), no:Domain.toInt(r[1])};
+                             }).filter(function(a){ return a.date && a.no; })})};
 }
 
 function log(kind, detail, email){
@@ -1445,6 +1472,16 @@ var Helper = (function(){
     });
     return cells;
   }
+  /* 休みの子。サーバの absent に、まだ送っていない切替を重ねる（あとの入力が優先） */
+  function absView(){
+    var m = {};
+    (S.absent || []).forEach(function(no){ m[no] = true; });
+    queue.forEach(function(e){
+      if(e.date !== S.date || typeof e.abs !== "boolean") return;
+      if(e.abs) m[e.no] = true; else delete m[e.no];
+    });
+    return m;
+  }
 
   /* 返ってきた順ではなく、頼んだ順で新しいものだけを使う */
   function request(name, args){
@@ -1525,11 +1562,27 @@ var Helper = (function(){
     kick();
   }
 
+  /* 名前（番号）のところをタップすると、その子の 休み⇄出席 を切り替える。
+     休みにすると提出物は全部「休」判定。出席に戻すと、押されていた印が元どおり見える */
+  function tapWho(e){
+    var w = e.target.closest(".who[data-abs]");
+    if(!w) return;
+    var no = Number(w.getAttribute("data-abs"));
+    var on = !absView()[no];
+    queue.push({id: device() + "-" + Date.now().toString(36) + "-" + (++n), date:S.date, no:no,
+                abs:on, at:Date.now(), via:"tap", dev:device()});
+    saveQueue();
+    if(on) Sound.tick(); else Sound.undo();
+    render();
+    kick();
+  }
+
   function onTap(e){
     var c = e.target.closest(".cell[data-k]");
     if(!c) return;
     var k = c.getAttribute("data-k"), p = k.split(":");
     if(S.excused[k]){ Sound.no(); flash(c); return; }
+    if(absView()[Number(p[0])]){ flash(c); return; }   /* 休みの子のマスは押せない */
     var next = Domain.nextState(view()[k] || "");
     if(next === "on") Sound.ok(); else if(next === "") Sound.undo(); else Sound.tick();
     mark(Number(p[0]), Number(p[1]), next);
@@ -1560,10 +1613,11 @@ var Helper = (function(){
   function itemOf(slot){ return S.items.filter(function(i){ return i.slot === slot; })[0]; }
 
   function summaryHtml(){
-    var cells = view();
+    var cells = view(), abs = absView();
     return S.items.map(function(it){
       var left = 0, forgot = 0, doing = 0;
       S.roster.forEach(function(r){
+        if(abs[r.no]) return;   /* 休みの子は全部「休」判定なので残数に入れない */
         var k = r.no + ":" + it.slot;
         if(S.excused[k]) return;
         if(!cells[k]) left++;
@@ -1579,7 +1633,7 @@ var Helper = (function(){
   }
   function paintSummary(){ var s = root && root.querySelector(".sum"); if(s) s.innerHTML = summaryHtml(); }
 
-  function paneHtml(list, rows, cols, cells, named){
+  function paneHtml(list, rows, cols, cells, named, abs){
     var h = '<div class="pane" style="--cols:' + cols + ';--rows:' + (rows + 1) + ';grid-template-rows:auto repeat(' + rows + ',minmax(0,1fr))">';
     h += '<div class="row head"><div>' + (named ? 'ばん・なまえ' : 'ばん') + '</div>'
        + S.items.map(function(it){ return '<div class="' + (it.color ? "t-" + it.color : "") + '">' + icon(it.icon) + '<span>' + esc(it.name) + '</span></div>'; }).join("")
@@ -1591,11 +1645,15 @@ var Helper = (function(){
            + S.items.map(function(it){ return '<div class="cell' + (it.color ? " t-" + it.color : "") + '"></div>'; }).join("") + '</div>';
         continue;
       }
-      h += '<div class="row"><div class="who"><span class="no">' + st.no + '</span>'
-         + (st.name ? '<span class="nm">' + esc(st.name) + '</span>' : '') + '</div>'
+      var ab = !!abs[st.no];
+      h += '<div class="row' + (ab ? ' abs' : '') + '"><button type="button" class="who" data-abs="' + st.no + '"'
+         + ' aria-pressed="' + ab + '" aria-label="' + st.no + 'ばん 休みの切り替え">'
+         + '<span class="no">' + st.no + '</span>'
+         + (st.name ? '<span class="nm">' + esc(st.name) + '</span>' : '')
+         + (ab ? '<span class="ab">休</span>' : '') + '</button>'
          + S.items.map(function(it){
              var k = st.no + ":" + it.slot;
-             return cellHtml(st.no, it, cells[k], !!S.excused[k]);
+             return cellHtml(st.no, it, ab ? "rest" : cells[k], !ab && !!S.excused[k]);
            }).join("") + '</div>';
     }
     return h + '</div>';
@@ -1643,9 +1701,10 @@ var Helper = (function(){
       var R = S.roster.filter(function(r){ return r.no > SPLIT; });
       var rows = Math.max(SPLIT, L.length, R.length);
       var named = S.roster.some(function(r){ return r.name; });
+      var abs = absView();
       var cols = (named ? "minmax(0,2.2fr)" : "minmax(0,.8fr)") + " repeat(" + S.items.length + ",minmax(0,1fr))";
       body = '<div class="sumbar"><div class="sum">' + summaryHtml() + '</div></div>'
-           + '<div class="panes">' + paneHtml(L, rows, cols, cells, named) + paneHtml(R, rows, cols, cells, named) + '</div>';
+           + '<div class="panes">' + paneHtml(L, rows, cols, cells, named, abs) + paneHtml(R, rows, cols, cells, named, abs) + '</div>';
     }
     root.innerHTML = '<div class="helper">' + head + body + '</div>';
   }
@@ -1662,6 +1721,7 @@ var Helper = (function(){
   document.addEventListener("click", function(e){
     if(!active || !root || !root.contains(e.target)) return;
     if(e.target.closest("[data-act=teacher]")){ if(opts.openTeacher) opts.openTeacher(); return; }
+    tapWho(e);
     onTap(e);
   });
   document.addEventListener("visibilitychange", function(){ if(active && !document.hidden) kick(); });

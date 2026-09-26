@@ -192,12 +192,15 @@ function helperState(ctx){
   var items = itemsFor(date, days, slots).items;
   var roster = ctx.roster || readRoster();
   var events = ctx.events || readEvents();
+  var absences = ctx.absences || readAbsences();
   var v = Domain.dayView({date:date, items:items, roster:roster, events:events,
-                          absences:readAbsences(), exemptions:readExemptions()});
+                          absences:absences, exemptions:readExemptions()});
   var st = ctx.settings || readSettings();
   return {date:date, wd:Domain.weekday(date), items:items,
           roster: roster.map(function(s){ return {no:s.no, name: st.showNames ? s.name : ""}; }),
-          cells:v.cells, excused:v.excused, now:P.now(), net:st.netIps || ""};
+          cells:v.cells, excused:v.excused,
+          absent: absences.filter(function(a){ return a.date === date; }).map(function(a){ return a.no; }),
+          now:P.now(), net:st.netIps || ""};
 }
 /* 係の画面を使えるのは 8:00〜14:00（日本時間）。閉じている間は closed を返す。
    先生（staff）はいつでも見られる。端末側でも同じ時刻で閉じるので、
@@ -236,13 +239,15 @@ function apiMark(events, sentAt){
   var rosterList = readRoster(), roster = {};
   rosterList.forEach(function(s){ roster[s.no] = true; });
   var slots = readSlots(), settings = readSettings();
-  var days = null;
+  var days = null, absRows = [];
   P.lock(function(){
     days = readDays();
     var recs = P.rows("記録");
     var recIdx = {};
     recs.forEach(function(r, i){ recIdx[Domain.asDate(r[0]) + "|" + Domain.toInt(r[1])] = i; });
     var dirty = {}, fresh = [];
+    var absDirty = false;
+    absRows = P.rows("欠席");
     list.forEach(function(e){
       if(!e || typeof e !== "object") return;
       var id = String(e.id || "");
@@ -252,6 +257,17 @@ function apiMark(events, sentAt){
       if(date !== date0 && !isTeacher) return;
       var no = Domain.toInt(e.no), slot = Domain.toInt(e.slot);
       if(!roster[no]) return;
+      /* 休みの切替：{abs:true}=休み、{abs:false}=出席に戻す（児童の名前セルのタップ）
+         書き換えるのは「欠席」シートだけ。マスの記録は残るので、戻すと元どおり見える */
+      if(e.abs === true || e.abs === false){
+        var ai = -1;
+        for(var z = 0; z < absRows.length; z++){
+          if(Domain.asDate(absRows[z][0]) === date && Domain.toInt(absRows[z][1]) === no){ ai = z; break; }
+        }
+        if(e.abs && ai < 0){ absRows.push([date, no]); absDirty = true; }
+        else if(!e.abs && ai >= 0){ absRows.splice(ai, 1); absDirty = true; }
+        return;
+      }
       var items = date === date0 ? (days[date] || dailyItems(slots)) : days[date];
       if(!items || !items.some(function(it){ return it.slot === slot; })) return;
       if(!OP[e.op]) return;
@@ -275,9 +291,13 @@ function apiMark(events, sentAt){
     });
     Object.keys(dirty).forEach(function(i){ P.put("記録", Number(i), recs[i]); });
     P.append("記録", fresh);
+    if(absDirty) P.replace("欠席", absRows);
   });
   return {processed:processed,
-          state:helperState({days:days, slots:slots, roster:rosterList, settings:settings})};
+          state:helperState({days:days, slots:slots, roster:rosterList, settings:settings,
+                             absences:absRows.map(function(r){
+                               return {date:Domain.asDate(r[0]), no:Domain.toInt(r[1])};
+                             }).filter(function(a){ return a.date && a.no; })})};
 }
 
 function log(kind, detail, email){
