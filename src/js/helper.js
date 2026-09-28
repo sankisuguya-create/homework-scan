@@ -1,7 +1,7 @@
 /* ==================================================================
    係の画面。当日の「だれが・何を出したか」の表だけを出す。
 
-   ■ 番号順に10人ずつ、左から3列（31人目以降は次の段）
+   ■ 番号順に10人ずつ、左から3列（31人目以降は3列目に続ける）
    ■ マスをタップするたびに  空白 → ○ → 休 → 忘 → △ → 空白
    ■ 免除のマスは ○ と同じ見た目（理由は係に見せない）。タップしても変わらない
    ■ タップした記録は、まずこの端末に貯めてからサーバへ送る。
@@ -251,8 +251,8 @@ var Helper = (function(){
   function paintSummary(){ var s = root && root.querySelector(".sum"); if(s) s.innerHTML = summaryHtml(); }
 
   function paneHtml(list, rows, cols, cells, named, abs){
-    var h = '<div class="pane" style="--cols:' + cols + ';--rows:' + (rows + 1) + ';grid-template-rows:74px repeat(' + rows + ',minmax(48px,1fr))">';
-    h += '<div class="row head"><div>' + (named ? 'ばん・なまえ' : 'ばん') + '</div>'
+    var h = '<div class="pane" style="--cols:' + cols + ';--rows:' + (rows + 1) + ';grid-template-rows:48px repeat(' + rows + ',minmax(0,1fr))">';
+    h += '<div class="row head"><div>' + (named ? '名前' : '番号') + '</div>'
        + S.items.map(function(it){ return '<div class="' + (it.color ? "t-" + it.color : "") + '">' + icon(it.icon) + '<span>' + esc(it.name) + '</span></div>'; }).join("")
        + '</div>';
     for(var i = 0; i < rows; i++){
@@ -318,12 +318,15 @@ var Helper = (function(){
       var panes = [];
       var named = S.roster.some(function(r){ return r.name; });
       var abs = absView();
-      var cols = (named ? "minmax(120px,1.8fr)" : "48px") + " repeat(" + S.items.length + ",minmax(48px,1fr))";
-      for(var i = 0; i < Math.max(3, Math.ceil(roster.length / SPLIT)); i++){
-        panes.push(paneHtml(roster.slice(i * SPLIT, (i + 1) * SPLIT), SPLIT, cols, cells, named, abs));
+      /* 元の名前列（1.8fr）の幅を半分にし、空いた幅を提出物へ配分する。 */
+      var nameFr = .9 * S.items.length / (S.items.length + .9);
+      var cols = (named ? "minmax(60px," + nameFr + "fr)" : "32px") + " repeat(" + S.items.length + ",minmax(0,1fr))";
+      var rows = Math.max(SPLIT, roster.length - SPLIT * 2);
+      for(var i = 0; i < 3; i++){
+        panes.push(paneHtml(roster.slice(i * SPLIT, i === 2 ? roster.length : (i + 1) * SPLIT), rows, cols, cells, named, abs));
       }
       body = '<div class="sumbar"><div class="sum">' + summaryHtml() + '</div></div>'
-           + '<div class="panes" style="--pane-min:' + ((named ? 120 : 48) + S.items.length * 48 + 6) + 'px">' + panes.join("") + '</div>';
+           + '<div class="panes">' + panes.join("") + '</div>';
     }
     root.innerHTML = '<div class="helper">' + head + body + '</div>';
   }
