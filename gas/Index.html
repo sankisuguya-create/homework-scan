@@ -997,7 +997,7 @@ var Helper = (function(){
 
   function paneHtml(list, rows, cols, cells, named, abs){
     var h = '<div class="pane" style="--cols:' + cols + ';--rows:' + (rows + 1) + ';grid-template-rows:74px repeat(' + rows + ',minmax(48px,1fr))">';
-    h += '<div class="row head"><div>' + (named ? 'ばん・なまえ' : 'ばん') + '</div>'
+    h += '<div class="row head"><div>' + (named ? '番号/名前' : '番号') + '</div>'
        + S.items.map(function(it){ return '<div class="' + (it.color ? "t-" + it.color : "") + '">' + icon(it.icon) + '<span>' + esc(it.name) + '</span></div>'; }).join("")
        + '</div>';
     for(var i = 0; i < rows; i++){
@@ -1063,12 +1063,14 @@ var Helper = (function(){
       var panes = [];
       var named = S.roster.some(function(r){ return r.name; });
       var abs = absView();
-      var cols = (named ? "minmax(120px,1.8fr)" : "48px") + " repeat(" + S.items.length + ",minmax(48px,1fr))";
+      /* 元の名前列（1.8fr）の幅を半分にし、空いた幅を提出物へ配分する。 */
+      var nameFr = .9 * S.items.length / (S.items.length + .9);
+      var cols = (named ? "minmax(60px," + nameFr + "fr)" : "48px") + " repeat(" + S.items.length + ",minmax(48px,1fr))";
       for(var i = 0; i < Math.max(3, Math.ceil(roster.length / SPLIT)); i++){
         panes.push(paneHtml(roster.slice(i * SPLIT, (i + 1) * SPLIT), SPLIT, cols, cells, named, abs));
       }
       body = '<div class="sumbar"><div class="sum">' + summaryHtml() + '</div></div>'
-           + '<div class="panes" style="--pane-min:' + ((named ? 120 : 48) + S.items.length * 48 + 6) + 'px">' + panes.join("") + '</div>';
+           + '<div class="panes" style="--pane-min:' + ((named ? 60 : 48) + S.items.length * 48 + 6) + 'px">' + panes.join("") + '</div>';
     }
     root.innerHTML = '<div class="helper">' + head + body + '</div>';
   }
