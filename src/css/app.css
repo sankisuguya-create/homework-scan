@@ -73,9 +73,9 @@ button{cursor:pointer;touch-action:manipulation}
 .chip .left{font-size:24px}
 .chip.all{background:var(--done);color:var(--on-done);border-color:var(--done)}
 
-.panes{flex:1;display:grid;grid-template-columns:repeat(3,minmax(var(--pane-min),1fr));grid-auto-rows:minmax(560px,1fr);gap:12px;padding:10px 12px 12px;min-height:0;overflow:auto}
+.panes{flex:1;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));grid-template-rows:minmax(0,1fr);gap:12px;padding:6px 12px;min-height:0}
 /* 行の高さ（--rh）に合わせて字の大きさを決める。品目や人数が増えても字がはみ出さない */
-.pane{display:grid;min-height:560px;border:var(--line);border-radius:var(--r);overflow:hidden;container-type:size;--rh:calc(100cqh / var(--rows, 11))}
+.pane{display:grid;min-height:0;border:var(--line);border-radius:var(--r);overflow:hidden;container-type:size;--rh:calc((100cqh - 48px) / (var(--rows, 11) - 1))}
 .pane .row{display:grid;grid-template-columns:var(--cols);border-top:var(--thin);min-height:0}
 .pane .row:first-child{border-top:0}
 .pane .head{background:var(--ink);color:var(--paper)}
@@ -95,7 +95,7 @@ button{cursor:pointer;touch-action:manipulation}
 .pick.t-red{background:var(--tr)}
 .pick.t-green{background:var(--tg)}
 .pick.t-blue[aria-pressed="true"],.pick.t-red[aria-pressed="true"],.pick.t-green[aria-pressed="true"]{background:var(--ink);color:var(--paper)}
-.pane .who{display:flex;align-items:center;gap:4px;padding:0 4px;min-width:0;position:relative}
+.pane .who{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0;padding:0 2px;min-width:0;min-height:0;position:relative}
 /* 名前のところはタップできるボタン（休み⇄出席の切替） */
 .pane button.who{border:0;background:transparent;font:inherit;color:var(--ink);text-align:left;cursor:pointer;width:100%;height:100%}
 .pane button.who:active{background:rgba(0,0,0,.06)}
@@ -103,8 +103,8 @@ button{cursor:pointer;touch-action:manipulation}
 /* 休みの子：行を薄くし、マスは全部「休」と同じ色に */
 .pane .row.abs .who{color:var(--sub)}
 .pane .row.abs .cell{opacity:.65}
-.pane .no{font-size:20px;font-weight:800;min-width:1.3em;text-align:right;font-variant-numeric:tabular-nums}
-.pane .nm{font-size:18px;font-weight:700;overflow-wrap:anywhere;line-height:1.15}
+.pane .no{font-size:clamp(10px,calc(var(--rh) * .28),16px);font-weight:800;line-height:1;font-variant-numeric:tabular-nums}
+.pane .nm{font-size:clamp(10px,calc(var(--rh) * .35),18px);font-weight:700;overflow-wrap:anywhere;line-height:1.05;text-align:center}
 /* マス。状態は「文字（○休忘△）＋色」で示す。色だけでは区別させない */
 .cell{display:flex;align-items:center;justify-content:center;border:0;border-left:var(--thin);background:var(--paper);
   padding:0;min-height:0;font-weight:800;color:var(--ink);font-size:clamp(14px,calc(var(--rh) * .72),40px);line-height:1;overflow:hidden}
@@ -120,6 +120,24 @@ button{cursor:pointer;touch-action:manipulation}
 .cell.flash{animation:flash .45s}
 @keyframes flash{0%{outline:6px solid var(--ink);outline-offset:-8px}100%{outline:0 solid var(--ink);outline-offset:-8px}}
 .row.empty .who,.row.empty .cell{background:var(--paper);cursor:default}
+
+/* 上部をコンパクトにして名簿の高さを確保する。 */
+.helper .hbar{min-height:36px;gap:8px;padding:4px 8px;flex-shrink:0}
+.helper .hbar .date{font-size:17px}
+.helper .hbar .title{font-size:11px;gap:4px}
+.helper .net{font-size:12px;gap:3px;padding:3px 6px}
+.helper .net .ic{width:16px;height:16px}
+.helper .tbtn{min-height:32px;font-size:12px;padding:2px 8px;gap:4px}
+.helper .legend{font-size:10px;gap:2px}
+.helper .legend .lg{width:18px;height:18px;font-size:12px;border-width:1px}
+.helper .legend .arr{font-size:9px}
+.helper .sumbar{gap:8px;padding:3px 8px;flex-shrink:0}
+.helper .sum{gap:5px}
+.helper .chip{font-size:11px;gap:4px;padding:1px 7px;border-width:1px}
+.helper .chip .ic{width:13px;height:13px}
+.helper .chip .left{font-size:12px}
+.helper .chip .fg,.helper .chip .dg{font-size:10px;padding:0 4px;border-width:1px}
+.helper .chip .dg .gm{width:9px;height:9px}
 
 .none{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;font-size:40px;font-weight:800}
 .none p{font-size:24px;margin:0}
