@@ -252,7 +252,7 @@ var Helper = (function(){
 
   function paneHtml(list, rows, cols, cells, named, abs){
     var h = '<div class="pane" style="--cols:' + cols + ';--rows:' + (rows + 1) + ';grid-template-rows:48px repeat(' + rows + ',minmax(0,1fr))">';
-    h += '<div class="row head"><div>' + (named ? '番号/名前' : '番号') + '</div>'
+    h += '<div class="row head"><div>' + (named ? '名前' : '番号') + '</div>'
        + S.items.map(function(it){ return '<div class="' + (it.color ? "t-" + it.color : "") + '">' + icon(it.icon) + '<span>' + esc(it.name) + '</span></div>'; }).join("")
        + '</div>';
     for(var i = 0; i < rows; i++){
