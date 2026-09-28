@@ -223,10 +223,25 @@ console.log("■ 分析");
   ok("免除と欠席の日は分母から外す（3番は 3/3、欠席は休の数に入れない）", by[3].required === 3 && by[3].submitted === 3 && by[3].rest === 0, by[3]);
   ok("先生が後から付けた印は時刻の平均に入れない", by[3].avg === "8:10", by[3].avg);
   ok("品目ごとの数", by[2].perItem["漢字ドリル"].sub === 1 && by[2].perItem["漢字ドリル"].req === 4, by[2].perItem);
+  const kanji = s.apiStats("", "", "漢字ドリル");
+  const math = s.apiStats("", "", "計算ドリル");
+  const k1 = kanji.students.find(x => x.no === 1), m1 = math.students.find(x => x.no === 1);
+  ok("品目別の分母・提出数・時刻を分離", k1.required === 4 && k1.submitted === 4 && k1.avg === "8:00" && m1.avg === "8:10");
+  ok("忘・△は該当品目にだけ計上", kanji.students.find(x => x.no === 2).forgot === 1 && math.students.find(x => x.no === 2).forgot === 0 && math.students.find(x => x.no === 2).doing === 0);
+  ok("品目別でも欠席・免除を除外", kanji.students.find(x => x.no === 3).required === 3 && math.students.find(x => x.no === 3).required === 0);
+  ok("免除された品目も選択肢に残る", math.availableItems.includes("計算ドリル"));
+  ok("初回表示は一品目、明示した全品目は合算", s.apiStats("", "", null).item === "漢字ドリル" && s.apiStats("", "", "").students.find(x => x.no === 1).required === 8);
+  const missing = s.apiStats("", "", "連絡帳");
+  ok("期間内にない品目は合算へ戻さず空集計", missing.dates.length === 0 && missing.students.every(x => x.required === 0 && x.rate === null && !x.flag));
   const r2 = s.apiStats("2026-09-23", "2026-09-24");
   ok("期間を絞れる", r2.dates.join() === "2026-09-23,2026-09-24");
   s.apiSaveDay("2026-09-22", []);
   ok("「提出物なし」にした日は数えない", s.apiStats().dates.length === 3);
+  s.apiSaveDay("2026-09-23", [{slot:1, name:"連絡帳"}]);
+  const separate = s.apiStats("", "", "漢字ドリル");
+  ok("同じ枠でも違う品目名を混ぜない", separate.dates.join() === "2026-09-21,2026-09-24" && separate.students.find(x => x.no === 1).required === 2);
+  ok("品目がない日は連続未提出を増やさない", separate.students.find(x => x.no === 2).streak === 1);
+  ok("期間内の過去の品目名も選択できる", separate.availableItems.includes("連絡帳"));
 }
 
 console.log("■ 関門（アカウントで役を分ける）");

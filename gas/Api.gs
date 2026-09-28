@@ -453,15 +453,25 @@ function apiSaveSettings(s){
 }
 
 /* 分析。既定は「集計の開始日」から、きのうまで（きょうはまだ途中なので入れない） */
-function apiStats(from, to){
+function apiStats(from, to, item){
   teacher();
   var st = readSettings(), d0 = today();
   from = Domain.asDate(from) || st.from || "";
   to = Domain.asDate(to) || Domain.addDays(d0, -1);
-  var r = Domain.stats({days:readDays(), roster:readRoster(), events:readEvents(),
+  var days = readDays(), availableItems = [];
+  Object.keys(days).sort().forEach(function(d){
+    if(d < from || d > to) return;
+    days[d].forEach(function(it){
+      if(availableItems.indexOf(it.name) < 0) availableItems.push(it.name);
+    });
+  });
+  /* 画面の初回は null で最初の品目を選ぶ。旧呼び出しと空文字は全品目。 */
+  item = item === null ? (availableItems[0] || "") : String(item || "");
+  var r = Domain.stats({days:days, roster:readRoster(), events:readEvents(), item:item,
                         absences:readAbsences(), exemptions:readExemptions(),
                         from:from, to:to, rateMin: st.ratePct / 100, streakMin: st.streakMin});
   r.from = from; r.to = to;
+  r.item = item; r.availableItems = availableItems;
   return r;
 }
 function apiLogs(){
