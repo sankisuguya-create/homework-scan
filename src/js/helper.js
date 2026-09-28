@@ -1,7 +1,7 @@
 /* ==================================================================
    係の画面。当日の「だれが・何を出したか」の表だけを出す。
 
-   ■ 左右2分割：左に 1〜18 番、右に 19 番から
+   ■ 番号順に10人ずつ、左から3列（31人目以降は次の段）
    ■ マスをタップするたびに  空白 → ○ → 休 → 忘 → △ → 空白
    ■ 免除のマスは ○ と同じ見た目（理由は係に見せない）。タップしても変わらない
    ■ タップした記録は、まずこの端末に貯めてからサーバへ送る。
@@ -26,7 +26,7 @@ var MARK_SVG = {
 function markGlyph(s){ return MARK_SVG[s] || esc(MARK[s || ""].ch); }
 
 var Helper = (function(){
-  var SPLIT = 18;
+  var SPLIT = 10;
   var QKEY = "homework-scan/queue-v1", DKEY = "homework-scan/device";
   var S = null;          /* サーバから来た当日の状態 */
   var queue = loadQueue();
@@ -251,7 +251,7 @@ var Helper = (function(){
   function paintSummary(){ var s = root && root.querySelector(".sum"); if(s) s.innerHTML = summaryHtml(); }
 
   function paneHtml(list, rows, cols, cells, named, abs){
-    var h = '<div class="pane" style="--cols:' + cols + ';--rows:' + (rows + 1) + ';grid-template-rows:auto repeat(' + rows + ',minmax(0,1fr))">';
+    var h = '<div class="pane" style="--cols:' + cols + ';--rows:' + (rows + 1) + ';grid-template-rows:74px repeat(' + rows + ',minmax(48px,1fr))">';
     h += '<div class="row head"><div>' + (named ? 'ばん・なまえ' : 'ばん') + '</div>'
        + S.items.map(function(it){ return '<div class="' + (it.color ? "t-" + it.color : "") + '">' + icon(it.icon) + '<span>' + esc(it.name) + '</span></div>'; }).join("")
        + '</div>';
@@ -266,7 +266,7 @@ var Helper = (function(){
       h += '<div class="row' + (ab ? ' abs' : '') + '"><button type="button" class="who" data-abs="' + st.no + '"'
          + ' aria-pressed="' + ab + '" aria-label="' + st.no + 'ばん 休みの切り替え">'
          + '<span class="no">' + st.no + '</span>'
-         + (st.name ? '<span class="nm">' + esc(st.name) + '</span>' : '')
+         + (st.name ? '<span class="nm">' + esc(String(st.name).trim().split(/[\s　]+/)[0]) + '</span>' : '')
          + (ab ? '<span class="ab">休</span>' : '') + '</button>'
          + S.items.map(function(it){
              var k = st.no + ":" + it.slot;
@@ -314,14 +314,16 @@ var Helper = (function(){
     }else if(!S.items.length){
       body = '<div class="none">' + icon("star") + 'きょうは 提出物が ありません</div>';
     }else{
-      var L = S.roster.filter(function(r){ return r.no <= SPLIT; });
-      var R = S.roster.filter(function(r){ return r.no > SPLIT; });
-      var rows = Math.max(SPLIT, L.length, R.length);
+      var roster = S.roster.slice().sort(function(a, b){ return a.no - b.no; });
+      var panes = [];
       var named = S.roster.some(function(r){ return r.name; });
       var abs = absView();
-      var cols = (named ? "minmax(0,2.2fr)" : "minmax(0,.8fr)") + " repeat(" + S.items.length + ",minmax(0,1fr))";
+      var cols = (named ? "minmax(120px,1.8fr)" : "48px") + " repeat(" + S.items.length + ",minmax(48px,1fr))";
+      for(var i = 0; i < Math.max(3, Math.ceil(roster.length / SPLIT)); i++){
+        panes.push(paneHtml(roster.slice(i * SPLIT, (i + 1) * SPLIT), SPLIT, cols, cells, named, abs));
+      }
       body = '<div class="sumbar"><div class="sum">' + summaryHtml() + '</div></div>'
-           + '<div class="panes">' + paneHtml(L, rows, cols, cells, named, abs) + paneHtml(R, rows, cols, cells, named, abs) + '</div>';
+           + '<div class="panes" style="--pane-min:' + ((named ? 120 : 48) + S.items.length * 48 + 6) + 'px">' + panes.join("") + '</div>';
     }
     root.innerHTML = '<div class="helper">' + head + body + '</div>';
   }

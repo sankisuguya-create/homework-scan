@@ -83,13 +83,13 @@ button{cursor:pointer;touch-action:manipulation}
 .chip .left{font-size:24px}
 .chip.all{background:var(--done);color:var(--on-done);border-color:var(--done)}
 
-.panes{flex:1;display:grid;grid-template-columns:1fr 1fr;gap:20px;padding:10px 16px 12px;min-height:0}
+.panes{flex:1;display:grid;grid-template-columns:repeat(3,minmax(var(--pane-min),1fr));grid-auto-rows:minmax(560px,1fr);gap:12px;padding:10px 12px 12px;min-height:0;overflow:auto}
 /* 行の高さ（--rh）に合わせて字の大きさを決める。品目や人数が増えても字がはみ出さない */
-.pane{display:grid;min-height:0;border:var(--line);border-radius:var(--r);overflow:hidden;container-type:size;--rh:calc(100cqh / var(--rows, 19))}
+.pane{display:grid;min-height:560px;border:var(--line);border-radius:var(--r);overflow:hidden;container-type:size;--rh:calc(100cqh / var(--rows, 11))}
 .pane .row{display:grid;grid-template-columns:var(--cols);border-top:var(--thin);min-height:0}
 .pane .row:first-child{border-top:0}
 .pane .head{background:var(--ink);color:var(--paper)}
-.pane .head > div{display:flex;align-items:center;justify-content:center;gap:6px;font-weight:700;font-size:clamp(14px,1.4vw,20px);padding:4px;text-align:center;line-height:1.15}
+.pane .head > div{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;min-width:0;font-weight:700;font-size:14px;padding:4px 2px;text-align:center;line-height:1.15;overflow-wrap:anywhere}
 .pane .head .ic{width:1.5em;height:1.5em}
 /* 品目の列の色。アイコンと名前と一緒に出す（色だけで区別しない） */
 .head .t-blue{background:var(--tb);color:var(--ink)}
@@ -105,16 +105,16 @@ button{cursor:pointer;touch-action:manipulation}
 .pick.t-red{background:var(--tr)}
 .pick.t-green{background:var(--tg)}
 .pick.t-blue[aria-pressed="true"],.pick.t-red[aria-pressed="true"],.pick.t-green[aria-pressed="true"]{background:var(--ink);color:var(--paper)}
-.pane .who{display:flex;align-items:center;gap:10px;padding:0 10px;min-width:0}
+.pane .who{display:flex;align-items:center;gap:4px;padding:0 4px;min-width:0;position:relative}
 /* 名前のところはタップできるボタン（休み⇄出席の切替） */
 .pane button.who{border:0;background:transparent;font:inherit;color:var(--ink);text-align:left;cursor:pointer;width:100%;height:100%}
 .pane button.who:active{background:rgba(0,0,0,.06)}
-.pane .who .ab{background:var(--warn);color:var(--ink);border-radius:999px;padding:0 .5em;font-weight:800;font-size:clamp(12px,calc(var(--rh) * .5),26px);line-height:1.5}
+.pane .who .ab{position:absolute;right:2px;top:0;background:var(--warn);color:var(--ink);border-radius:4px;padding:0 2px;font-weight:800;font-size:12px;line-height:1.2}
 /* 休みの子：行を薄くし、マスは全部「休」と同じ色に */
 .pane .row.abs .who{color:var(--sub)}
 .pane .row.abs .cell{opacity:.65}
-.pane .no{font-size:clamp(14px,calc(var(--rh) * .62),34px);font-weight:800;min-width:1.6em;text-align:right;font-variant-numeric:tabular-nums}
-.pane .nm{font-size:clamp(12px,calc(var(--rh) * .5),26px);font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pane .no{font-size:20px;font-weight:800;min-width:1.3em;text-align:right;font-variant-numeric:tabular-nums}
+.pane .nm{font-size:18px;font-weight:700;overflow-wrap:anywhere;line-height:1.15}
 /* マス。状態は「文字（○休忘△）＋色」で示す。色だけでは区別させない */
 .cell{display:flex;align-items:center;justify-content:center;border:0;border-left:var(--thin);background:var(--paper);
   padding:0;min-height:0;font-weight:800;color:var(--ink);font-size:clamp(14px,calc(var(--rh) * .72),40px);line-height:1;overflow:hidden}
@@ -1409,7 +1409,7 @@ function toast(msg, ng){
 /* ==================================================================
    係の画面。当日の「だれが・何を出したか」の表だけを出す。
 
-   ■ 左右2分割：左に 1〜18 番、右に 19 番から
+   ■ 番号順に10人ずつ、左から3列（31人目以降は次の段）
    ■ マスをタップするたびに  空白 → ○ → 休 → 忘 → △ → 空白
    ■ 免除のマスは ○ と同じ見た目（理由は係に見せない）。タップしても変わらない
    ■ タップした記録は、まずこの端末に貯めてからサーバへ送る。
@@ -1434,7 +1434,7 @@ var MARK_SVG = {
 function markGlyph(s){ return MARK_SVG[s] || esc(MARK[s || ""].ch); }
 
 var Helper = (function(){
-  var SPLIT = 18;
+  var SPLIT = 10;
   var QKEY = "homework-scan/queue-v1", DKEY = "homework-scan/device";
   var S = null;          /* サーバから来た当日の状態 */
   var queue = loadQueue();
@@ -1659,7 +1659,7 @@ var Helper = (function(){
   function paintSummary(){ var s = root && root.querySelector(".sum"); if(s) s.innerHTML = summaryHtml(); }
 
   function paneHtml(list, rows, cols, cells, named, abs){
-    var h = '<div class="pane" style="--cols:' + cols + ';--rows:' + (rows + 1) + ';grid-template-rows:auto repeat(' + rows + ',minmax(0,1fr))">';
+    var h = '<div class="pane" style="--cols:' + cols + ';--rows:' + (rows + 1) + ';grid-template-rows:74px repeat(' + rows + ',minmax(48px,1fr))">';
     h += '<div class="row head"><div>' + (named ? 'ばん・なまえ' : 'ばん') + '</div>'
        + S.items.map(function(it){ return '<div class="' + (it.color ? "t-" + it.color : "") + '">' + icon(it.icon) + '<span>' + esc(it.name) + '</span></div>'; }).join("")
        + '</div>';
@@ -1674,7 +1674,7 @@ var Helper = (function(){
       h += '<div class="row' + (ab ? ' abs' : '') + '"><button type="button" class="who" data-abs="' + st.no + '"'
          + ' aria-pressed="' + ab + '" aria-label="' + st.no + 'ばん 休みの切り替え">'
          + '<span class="no">' + st.no + '</span>'
-         + (st.name ? '<span class="nm">' + esc(st.name) + '</span>' : '')
+         + (st.name ? '<span class="nm">' + esc(String(st.name).trim().split(/[\s　]+/)[0]) + '</span>' : '')
          + (ab ? '<span class="ab">休</span>' : '') + '</button>'
          + S.items.map(function(it){
              var k = st.no + ":" + it.slot;
@@ -1722,14 +1722,16 @@ var Helper = (function(){
     }else if(!S.items.length){
       body = '<div class="none">' + icon("star") + 'きょうは 提出物が ありません</div>';
     }else{
-      var L = S.roster.filter(function(r){ return r.no <= SPLIT; });
-      var R = S.roster.filter(function(r){ return r.no > SPLIT; });
-      var rows = Math.max(SPLIT, L.length, R.length);
+      var roster = S.roster.slice().sort(function(a, b){ return a.no - b.no; });
+      var panes = [];
       var named = S.roster.some(function(r){ return r.name; });
       var abs = absView();
-      var cols = (named ? "minmax(0,2.2fr)" : "minmax(0,.8fr)") + " repeat(" + S.items.length + ",minmax(0,1fr))";
+      var cols = (named ? "minmax(120px,1.8fr)" : "48px") + " repeat(" + S.items.length + ",minmax(48px,1fr))";
+      for(var i = 0; i < Math.max(3, Math.ceil(roster.length / SPLIT)); i++){
+        panes.push(paneHtml(roster.slice(i * SPLIT, (i + 1) * SPLIT), SPLIT, cols, cells, named, abs));
+      }
       body = '<div class="sumbar"><div class="sum">' + summaryHtml() + '</div></div>'
-           + '<div class="panes">' + paneHtml(L, rows, cols, cells, named, abs) + paneHtml(R, rows, cols, cells, named, abs) + '</div>';
+           + '<div class="panes" style="--pane-min:' + ((named ? 120 : 48) + S.items.length * 48 + 6) + 'px">' + panes.join("") + '</div>';
     }
     root.innerHTML = '<div class="helper">' + head + body + '</div>';
   }
