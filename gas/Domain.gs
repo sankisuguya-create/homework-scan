@@ -238,10 +238,11 @@ var Domain = (function(){
        flag      rate が目安より低い、または streak が目安以上 */
   function stats(opts){
     var from = opts.from || "", to = opts.to || "9999-99-99";
+    function selected(it){ return !opts.item || it.name === opts.item; }
     var rateMin = opts.rateMin == null ? 0.8 : opts.rateMin;
     var streakMin = opts.streakMin == null ? 3 : opts.streakMin;
     var dates = Object.keys(opts.days).filter(function(d){
-      return d >= from && d <= to && opts.days[d].length > 0;
+      return d >= from && d <= to && opts.days[d].some(selected);
     }).sort();
 
     var byDate = {};
@@ -262,6 +263,7 @@ var Domain = (function(){
       dates.forEach(function(d){
         var dayReq = 0, daySub = 0;
         opts.days[d].forEach(function(it){
+          if(!selected(it)) return;
           if(isExempt(opts.exemptions, d, st.no, it.slot)) return;
           var m = cellState(marksByDate[d], absByDate[d], st.no, it.slot);
           if(m && m.via === "absent") return;   /* 欠席の日は出すべき数に入れない */

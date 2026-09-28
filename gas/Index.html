@@ -532,10 +532,11 @@ var Domain = (function(){
        flag      rate が目安より低い、または streak が目安以上 */
   function stats(opts){
     var from = opts.from || "", to = opts.to || "9999-99-99";
+    function selected(it){ return !opts.item || it.name === opts.item; }
     var rateMin = opts.rateMin == null ? 0.8 : opts.rateMin;
     var streakMin = opts.streakMin == null ? 3 : opts.streakMin;
     var dates = Object.keys(opts.days).filter(function(d){
-      return d >= from && d <= to && opts.days[d].length > 0;
+      return d >= from && d <= to && opts.days[d].some(selected);
     }).sort();
 
     var byDate = {};
@@ -556,6 +557,7 @@ var Domain = (function(){
       dates.forEach(function(d){
         var dayReq = 0, daySub = 0;
         opts.days[d].forEach(function(it){
+          if(!selected(it)) return;
           if(isExempt(opts.exemptions, d, st.no, it.slot)) return;
           var m = cellState(marksByDate[d], absByDate[d], st.no, it.slot);
           if(m && m.via === "absent") return;   /* 欠席の日は出すべき数に入れない */
@@ -1189,9 +1191,9 @@ var Teacher = (function(){
     loading();
     return tcall("apiSetup").then(function(r){ SU = r; show(); });
   }
-  function loadStats(from, to){
+  function loadStats(from, to, item){
     loading();
-    return tcall("apiStats", from || "", to || "").then(function(r){ ST = r; show(); });
+    return tcall("apiStats", from || "", to || "", item === undefined ? null : item).then(function(r){ ST = r; show(); });
   }
 
   /* ────────── 今日と明日（最初に開く画面） ──────────
@@ -1366,11 +1368,16 @@ var Teacher = (function(){
     if(sortBy === "late") list.sort(function(a, b){ return (b.avgMin || 0) - (a.avgMin || 0) || a.no - b.no; });
     if(sortBy === "forgot") list.sort(function(a, b){ return b.forgot - a.forgot || a.no - b.no; });
     var flagged = ST.students.filter(function(s){ return s.flag; });
-    var h = '<div class="sec"><h2>' + icon("calendar") + '期間</h2><div class="line">'
+    var choices = ST.availableItems.slice();
+    if(ST.item && choices.indexOf(ST.item) < 0) choices.push(ST.item);
+    var h = '<div class="sec"><h2>' + icon("calendar") + '品目と期間</h2><div class="line">'
+      + '<label class="field">分析する品目<select id="st-item">'
+      + choices.map(function(name){ return '<option value="' + esc(name) + '"' + (name === ST.item ? ' selected' : '') + '>' + esc(name) + '</option>'; }).join("")
+      + '<option value=""' + (!ST.item ? ' selected' : '') + '>全品目（合算）</option></select></label>'
       + '<label class="field">開始<input type="date" id="st-from" value="' + esc(ST.from) + '"></label>'
       + '<label class="field">終了<input type="date" id="st-to" value="' + esc(ST.to) + '"></label>'
       + '<button class="btn primary" data-t="stats-run">' + icon("chart") + '集計する</button></div>'
-      + '<p class="note">集計日数：' + ST.dates.length + '日。○と休を「提出」、忘・△・空白を「未提出」として数えます。免除のマスは数えません。'
+      + '<p class="note">集計対象：' + esc(ST.item || '全品目（合算）') + ' ／ 集計日数：' + ST.dates.length + '日。○と休を「提出」、忘・△・空白を「未提出」として数えます。免除・欠席は分母から除きます。選んだ品目がない日は連続未提出の日数に含めません。'
       + '平均・中央値は、係がタップした○の時刻のみから算出します。</p></div>';
 
     /* みんなのまとめ：絶対値（数えた回数）と代表値（平均・中央値）を並べる */
@@ -1381,7 +1388,7 @@ var Teacher = (function(){
     ST.students.forEach(function(s){ tot.req += s.required; tot.sub += s.submitted;
       tot.rest += s.rest; tot.forgot += s.forgot; tot.doing += s.doing; });
     var topForgot = ST.students.reduce(function(m, s){ return s.forgot > (m ? m.forgot : -1) ? s : m; }, null);
-    h += '<div class="sec"><h2>' + icon("chart") + '全体のまとめ（この期間）</h2><div class="line" style="flex-wrap:wrap">'
+    h += '<div class="sec"><h2>' + icon("chart") + esc(ST.item || '全品目（合算）') + 'のまとめ</h2><div class="line" style="flex-wrap:wrap">'
       + '<span class="pick" style="cursor:default"><b>提出率</b>　平均 ' + pct(meanOf(rates)) + '　中央値 ' + pct(medianOf(rates)) + '</span>'
       + '<span class="pick" style="cursor:default"><b>提出時刻</b>　平均 ' + (meanOf(avgs) == null ? "―" : Domain.hhmm(meanOf(avgs)))
       + '　中央値 ' + (medianOf(meds) == null ? "―" : Domain.hhmm(medianOf(meds))) + '</span>'
@@ -1611,7 +1618,7 @@ var Teacher = (function(){
     if(t === "home-re") return loadHome();
     if(t === "slots-more"){ var g = b.closest(".slots, table"); if(g) g.classList.toggle("xopen"); return; }
     if(t === "save-abs") return saveAbs();
-    if(t === "stats-run") return loadStats($("#st-from").value, $("#st-to").value);
+    if(t === "stats-run") return loadStats($("#st-from").value, $("#st-to").value, $("#st-item").value);
     if(t === "ex-add"){
       SU.exemptions = readExempt();
       SU.exemptions.push({no:SU.roster[0].no, slot:0, from:D ? D.today : "", to:"", memo:""});
@@ -1647,6 +1654,7 @@ var Teacher = (function(){
   function onChange(e){
     if(!active || !root.contains(e.target)) return;
     if(e.target.id === "st-sort"){ sortBy = e.target.value; show(); }
+    if(e.target.id === "st-item") return loadStats($("#st-from").value, $("#st-to").value, e.target.value);
     if(e.target.matches("[data-slot]") || e.target.matches("[data-pslot]"))
       e.target.closest(".slot").classList.toggle("on", e.target.checked);
   }
