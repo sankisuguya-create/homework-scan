@@ -402,9 +402,8 @@ var Teacher = (function(){
       + '<div class="grow"></div>'
       + '<button class="btn" data-t="sd-print">' + icon("print") + 'この児童を印刷</button>'
       + '<button class="btn primary" data-t="sd-print-all">' + icon("print") + '全員分を印刷（' + SD.students.length + '枚）</button>'
-      + '</div>'
       + (SD.dates.length
-         ? '<p class="note sd-note">提出は ○と休。免除・欠席の日は分母に入れません。順位は提出率の高い順（忘・時刻はそれぞれ少ない順・早い順）。</p>'
+         ? '<span class="sd-note">提出は ○と休。免除・欠席の日は分母に入れません。順位は提出率の高い順（忘・時刻はそれぞれ少ない順・早い順）。</span>'
          : '')
       + '</div>'
       + (SD.dates.length ? '<div class="sec sd-sec">' + sdCardHtml(s) + '</div>'

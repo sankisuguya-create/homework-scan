@@ -291,14 +291,14 @@ textarea{border:var(--thin);border-radius:6px;padding:10px;font-size:18px;width:
 .linklike{border:0;background:transparent;font:inherit;font-weight:700;text-decoration:underline;
   text-underline-offset:3px;padding:0;cursor:pointer;color:inherit}
 .linklike:hover{color:var(--done)}
-.sd-sec{padding:12px 16px 10px;gap:8px}
+.sd-sec{padding:10px 16px 6px;gap:6px}
 .sd-h{margin:0;font-size:18px;white-space:nowrap;display:inline-flex;align-items:center;gap:6px;border-bottom:0;padding-bottom:0}
 .sd-h .ic{width:20px;height:20px}
 .sd-ctl{gap:8px}
 .sd-ctl .btn{min-height:36px;padding:4px 12px;font-size:15px}
 .sd-ctl .field{font-size:14px}
 .sd-ctl input[type="date"]{padding:3px 8px;font-size:15px;min-height:0;width:auto}
-.sd-note{font-size:13px;margin:0}
+.sd-note{font-size:13px;color:var(--sub);flex-basis:100%}
 .sd-card{display:flex;flex-direction:column;gap:4px}
 .sd-head{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
 .sd-name{font-size:20px}
@@ -2298,9 +2298,8 @@ var Teacher = (function(){
       + '<div class="grow"></div>'
       + '<button class="btn" data-t="sd-print">' + icon("print") + 'この児童を印刷</button>'
       + '<button class="btn primary" data-t="sd-print-all">' + icon("print") + '全員分を印刷（' + SD.students.length + '枚）</button>'
-      + '</div>'
       + (SD.dates.length
-         ? '<p class="note sd-note">提出は ○と休。免除・欠席の日は分母に入れません。順位は提出率の高い順（忘・時刻はそれぞれ少ない順・早い順）。</p>'
+         ? '<span class="sd-note">提出は ○と休。免除・欠席の日は分母に入れません。順位は提出率の高い順（忘・時刻はそれぞれ少ない順・早い順）。</span>'
          : '')
       + '</div>'
       + (SD.dates.length ? '<div class="sec sd-sec">' + sdCardHtml(s) + '</div>'
