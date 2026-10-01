@@ -284,6 +284,51 @@ textarea{border:var(--thin);border-radius:6px;padding:10px;font-size:18px;width:
 .teacher .slotmore-r td{text-align:center;padding:4px}
 .teacher .slots{gap:10px}
 .teacher .slot{padding:8px}
+
+/* ================= 児童の詳細カード（先生の画面・印刷で共通） =================
+   一画面に収めるため、行を横に並べ、カード内は縦に詰める */
+.linklike{border:0;background:transparent;font:inherit;font-weight:700;text-decoration:underline;
+  text-underline-offset:3px;padding:0;cursor:pointer;color:inherit}
+.linklike:hover{color:var(--done)}
+.sd-card{display:flex;flex-direction:column;gap:10px}
+.sd-head{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
+.sd-name{font-size:26px}
+.sd-meta{font-size:16px;font-weight:700;color:var(--sub)}
+.sd-cmp{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.sd-cmpItem{display:flex;flex-direction:column;gap:2px;border:var(--thin);border-radius:12px;
+  padding:8px 12px;background:var(--paper)}
+.sd-l{font-size:15px;font-weight:700;color:var(--sub)}
+.sd-v{font-size:26px;font-weight:800;font-variant-numeric:tabular-nums}
+.sd-s{font-size:15px;font-weight:700;color:var(--sub)}
+.sd-r{display:inline-flex;align-items:center;gap:4px;font-size:15px;font-weight:800;color:var(--ink)}
+.sd-r .ic{width:16px;height:16px}
+.sdtbl{font-size:17px;width:100%}
+.sdtbl th,.sdtbl td{padding:4px 8px;white-space:nowrap}
+.sdtbl .sd-none{color:var(--sub);text-align:center}
+.sdtbl .sd-total td{font-weight:800;border-top:2px solid var(--ink)}
+.sd-sel{min-width:9em}
+
+/* ================= 印刷（児童の詳細。1人1ページ） =================
+   画面では #hs-print を隠し、印刷時は #hs-print だけを出す。
+   .pp が1人分のページ。薄い色は印刷で消えるので黒・白だけで組む */
+#hs-print{display:none}
+@media print{
+  body{background:#fff}
+  body > *:not(#hs-print){display:none!important}
+  #hs-print{display:block!important;color:#000}
+  #hs-print .pp{page-break-after:always;padding:6mm 0}
+  #hs-print .pp:last-child{page-break-after:auto}
+  .pp-title{font-size:14px;font-weight:700;border-bottom:3px solid #000;padding-bottom:4px;margin-bottom:10px}
+  #hs-print .sd-name{font-size:22px}
+  #hs-print .sd-meta,#hs-print .sd-l,#hs-print .sd-s{color:#000}
+  #hs-print .sd-v{font-size:20px}
+  #hs-print .sd-cmpItem{border:2px solid #000;padding:6px 10px;background:#fff}
+  #hs-print .sd-r .ic{width:14px;height:14px}
+  #hs-print .sdtbl{font-size:14px}
+  #hs-print .sdtbl thead th{background:#000;color:#fff}
+  #hs-print .sdtbl th,#hs-print .sdtbl td{border:1.5px solid #000}
+  .pp-note{font-size:12px;margin-top:8px}
+}
 </style>
 </head>
 <body>
@@ -529,7 +574,18 @@ var Domain = (function(){
        rate      submitted / required（required が 0 なら null）
        avgMin / medMin  出した時刻の平均・中央値（先生が後から付けた印は除く）
        streak    いちばん新しい日から数えて、続けて出し忘れた日の数
-       flag      rate が目安より低い、または streak が目安以上 */
+       flag      rate が目安より低い、または streak が目安以上
+       rank / rankForgot / rankTime  クラス内の順位（高い率・少ない忘・早い時刻が先頭。
+                 同率は同じ番号。出すべき数が 0 の子・時刻の無い子は対象外）
+       perItem[品目名]  その品目だけの絶対値（req/sub/rest/forgot/doing）と
+                 平均（rate/avgMin/medMin）と順位（rank）
+     あわせてクラス全体の代表値（classAgg）と品目ごとのクラス平均（itemClass）を返す */
+  function mean(a){ return a.length ? a.reduce(function(x, y){ return x + y; }, 0) / a.length : null; }
+  function median(a){
+    if(!a.length) return null;
+    var s = a.slice().sort(function(x, y){ return x - y; }), i = Math.floor(s.length / 2);
+    return s.length % 2 ? s[i] : (s[i - 1] + s[i]) / 2;
+  }
   function stats(opts){
     var from = opts.from || "", to = opts.to || "9999-99-99";
     function selected(it){ return !opts.item || it.name === opts.item; }
@@ -563,14 +619,15 @@ var Domain = (function(){
           if(m && m.via === "absent") return;   /* 欠席の日は出すべき数に入れない */
           var s = m ? m.state : "";
           dayReq++; req++;
-          if(!perItem[it.name]){ perItem[it.name] = {req:0, sub:0}; if(itemNames.indexOf(it.name) < 0) itemNames.push(it.name); }
+          if(!perItem[it.name]){ perItem[it.name] = {req:0, sub:0, rest:0, forgot:0, doing:0, mins:[]};
+            if(itemNames.indexOf(it.name) < 0) itemNames.push(it.name); }
           perItem[it.name].req++;
-          if(s in n) n[s]++;
+          if(s in n){ n[s]++; perItem[it.name][s]++; }
           if(counts(s)){
             daySub++; sub++; perItem[it.name].sub++;
             if(s === "on" && m.via !== "teacher"){
               var mm = stampMinutes(m.at);
-              if(mm != null) mins.push(mm);
+              if(mm != null){ mins.push(mm); perItem[it.name].mins.push(mm); }
             }
           }
         });
@@ -579,13 +636,14 @@ var Domain = (function(){
       var streak = 0;
       for(var i = dayMiss.length - 1; i >= 0 && dayMiss[i].missed; i--) streak++;
       var rate = req ? sub / req : null;
-      var avg = mins.length ? mins.reduce(function(a, b){ return a + b; }, 0) / mins.length : null;
-      var sorted = mins.slice().sort(function(a, b){ return a - b; });
-      var med = null;
-      if(sorted.length){
-        var h = Math.floor(sorted.length / 2);
-        med = sorted.length % 2 ? sorted[h] : (sorted[h - 1] + sorted[h]) / 2;
-      }
+      var avg = mean(mins), med = median(mins);
+      Object.keys(perItem).forEach(function(nm){
+        var pi = perItem[nm];
+        pi.rate = pi.req ? pi.sub / pi.req : null;
+        pi.avgMin = mean(pi.mins); pi.medMin = median(pi.mins);
+        pi.avg = hhmm(pi.avgMin); pi.med = hhmm(pi.medMin);
+        delete pi.mins;
+      });
       var lowRate = rate != null && rate < rateMin;
       var longStreak = streak >= streakMin;
       return {no:st.no, name:st.name, required:req, submitted:sub, rate:rate,
@@ -594,8 +652,43 @@ var Domain = (function(){
               streak:streak, perItem:perItem,
               lowRate:lowRate, longStreak:longStreak, flag: lowRate || longStreak};
     });
+    /* クラスとの比較・クラス内の順位。出すべき数 0 の子は順位を付けない */
+    var ranked = students.filter(function(s){ return s.rate != null; });
+    var timed = students.filter(function(s){ return s.avgMin != null; });
+    students.forEach(function(s){
+      if(s.rate != null){
+        s.rank = 1 + ranked.filter(function(o){ return o.rate > s.rate; }).length;
+        s.rankForgot = 1 + ranked.filter(function(o){ return o.forgot < s.forgot; }).length;
+        if(s.avgMin != null)
+          s.rankTime = 1 + timed.filter(function(o){ return o.avgMin < s.avgMin; }).length;
+      }
+      Object.keys(s.perItem).forEach(function(nm){
+        s.perItem[nm].rank = 1 + students.filter(function(o){
+          var q = o.perItem[nm]; return q && q.rate != null && q.rate > s.perItem[nm].rate;
+        }).length;
+      });
+    });
+    var itemClass = {};
+    itemNames.forEach(function(nm){
+      var rs = [], avs = [];
+      students.forEach(function(s){
+        var pi = s.perItem[nm];
+        if(!pi) return;
+        if(pi.rate != null) rs.push(pi.rate);
+        if(pi.avgMin != null) avs.push(pi.avgMin);
+      });
+      itemClass[nm] = {n:rs.length, rateMean:mean(rs), avgMinMean:mean(avs)};
+    });
+    var classAgg = {
+      n:students.length, rankN:ranked.length, timeN:timed.length,
+      rateMean:mean(ranked.map(function(s){ return s.rate; })),
+      rateMed:median(ranked.map(function(s){ return s.rate; })),
+      timeMean:mean(timed.map(function(s){ return s.avgMin; })),
+      timeMed:median(students.map(function(s){ return s.medMin; }).filter(function(v){ return v != null; })),
+      forgotMean:mean(students.map(function(s){ return s.forgot; }))
+    };
     return {dates:dates, itemNames:itemNames, students:students,
-            rateMin:rateMin, streakMin:streakMin};
+            rateMin:rateMin, streakMin:streakMin, classAgg:classAgg, itemClass:itemClass};
   }
 
   /* ── 名簿の貼り付け ───────────────────────
@@ -1350,6 +1443,8 @@ var ICON_PATHS = {
   gear:   '<circle cx="12" cy="12" r="3.2"/><path d="M12 2.8v3M12 18.2v3M2.8 12h3M18.2 12h3M5.5 5.5l2.1 2.1M16.4 16.4l2.1 2.1M5.5 18.5l2.1-2.1M16.4 7.6l2.1-2.1"/>',
   chart:  '<path d="M4 20V4M4 20h16"/><rect x="7" y="12" width="3" height="5"/><rect x="12" y="8" width="3" height="9"/><rect x="17" y="5" width="3" height="12"/>',
   users:  '<circle cx="9" cy="8" r="3.2"/><path d="M3 20a6 6 0 0 1 12 0"/><circle cx="17" cy="9" r="2.5"/><path d="M16 14.2a5 5 0 0 1 5.5 5.8"/>',
+  user:   '<circle cx="12" cy="8" r="3.6"/><path d="M4.5 20a7.5 7.5 0 0 1 15 0"/>',
+  print:  '<path d="M7 8V3.5h10V8"/><rect x="4" y="8" width="16" height="8" rx="1.6"/><path d="M7 13h10v7H7z"/>',
   calendar:'<rect x="3.5" y="5" width="17" height="15.5" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/>',
   shield: '<path d="M12 3l8 3v6c0 4.5-3.3 8-8 9-4.7-1-8-4.5-8-9V6z"/><path d="M9 12l2 2 4-4"/>',
   door:   '<path d="M14 4H6v16h8"/><path d="M11 12h10M17 8l4 4-4 4"/>',
@@ -1796,16 +1891,18 @@ var Helper = (function(){
      今日と明日 … 最初に開く画面。今日／明日（次の登校日）の宿題を決定＋今日の未提出者
      今日の表   … その日の提出物を決める・欠席・マスを直す（前の7日まで）
      分析       … 提出率・平均提出時刻・連続未提出の日数
+     児童       … 1人ずつの提出状況。クラス平均との比較・クラス内順位・印刷
      免除       … 特別な事情のある児童を、期間・品目ごとに外す
      名簿と品目 … 名簿の貼り付け、品目の枠（名前・アイコン・いつも出す）
      設定       … 画面のデザイン、分析の目安、係の画面の氏名、操作記録
 ================================================================== */
 var Teacher = (function(){
   var root = null, opts = {}, tab = "home", active = false;
-  var D = null, SU = null, ST = null, date = "", sortBy = "no", logs = null;
+  var D = null, SU = null, ST = null, SD = null, sdNo = null, date = "", sortBy = "no", logs = null;
   var H1 = null, H2 = null;   /* きょうとあした：H1=きょう（休日なら次の登校日）、H2=その次の登校日 */
   var bgTheme = "grad";       /* 先生の画面の背景（この端末だけに効く） */
   var TABS = [["home", "paper", "今日と明日"], ["day", "calendar", "今日の表"], ["stats", "chart", "分析"],
+              ["student", "user", "児童"],
               ["exempt", "shield", "免除"], ["roster", "users", "名簿と品目"], ["settings", "gear", "設定"]];
 
   /* サーバを呼び、失敗したら知らせる。押したボタンがあれば処理中の見た目にする */
@@ -1839,6 +1936,7 @@ var Teacher = (function(){
     if(tab === "home") return (H1 && H2) ? frame(homeHtml()) : loadHome();
     if(tab === "day") return D ? frame(dayHtml()) : loadDay(date);
     if(tab === "stats") return ST ? frame(statsHtml()) : loadStats();
+    if(tab === "student") return SD ? frame(studentHtml()) : loadStudents();
     if(!SU) return loadSetup();
     if(tab === "exempt") return frame(exemptHtml());
     if(tab === "roster") return frame(rosterHtml());
@@ -1867,6 +1965,11 @@ var Teacher = (function(){
   function loadStats(from, to, item){
     loading();
     return tcall("apiStats", from || "", to || "", item === undefined ? null : item).then(function(r){ ST = r; show(); });
+  }
+  /* 児童の画面は常に「全品目（合算）」で集計する（品目ごとの内訳は perItem が持つ） */
+  function loadStudents(from, to){
+    loading();
+    return tcall("apiStats", from || "", to || "", "").then(function(r){ SD = r; show(); });
   }
 
   /* ────────── 今日と明日（最初に開く画面） ──────────
@@ -2098,7 +2201,8 @@ var Teacher = (function(){
             return esc(n) + ' ' + s.perItem[n].sub + '/' + s.perItem[n].req;
           }).join("　");
           return '<tr' + (s.flag ? ' class="flag"' : '') + '><td class="num">' + s.no + '</td><td>'
-            + (s.flag ? '<span class="mk flag">' + icon("flag") + '</span> ' : '') + esc(s.name) + '</td>'
+            + (s.flag ? '<span class="mk flag">' + icon("flag") + '</span> ' : '')
+            + '<button class="linklike" data-t="open-student" data-no="' + s.no + '" title="この児童の詳細を開く">' + esc(s.name) + '</button></td>'
             + '<td>' + bar + '</td><td class="num">' + s.submitted + '/' + s.required + '</td>'
             + '<td class="num">' + s.rest + '</td><td class="num">' + s.forgot + (s.forgot ? '/' + s.required : '') + '</td><td class="num">' + s.doing + '</td>'
             + '<td class="num">' + (s.avg || "―") + '</td><td class="num">' + (s.med || "―") + '</td>'
@@ -2115,6 +2219,102 @@ var Teacher = (function(){
           return esc(n) + ' ' + sub + '/' + req;
         }).join("　") + '</td></tr></tfoot></table></div></div>';
     return h;
+  }
+
+  /* ────────── 児童（1人ずつの詳細・クラスとの比較・印刷） ──────────
+     一画面に収める：上の行で児童と期間を選び、下のカードに全部を出す。
+     印刷は #hs-print に「1人1ページ」の紙を組んでから window.print()。
+     全員分は児童ごとに同じカードが並ぶ */
+  function f1(x){ return x == null ? "―" : Number(x).toFixed(1); }
+  function rankTxt(rank, n){ return rank == null ? "―" : rank + " / " + n; }
+  function sdRangeLabel(){
+    if(!SD.from && !SD.to) return "（期間の指定なし）";
+    return SD.from + " 〜 " + SD.to;
+  }
+  /* 1人分のカード。画面にも印刷用ページにも同じものを出す */
+  function sdCardHtml(s){
+    var C = SD.classAgg || {};
+    var cmp = '<div class="sd-cmp">'
+      + cmpChip("提出率", pct(s.rate), pct(C.rateMean), rankTxt(s.rank, C.rankN))
+      + cmpChip("忘れた回数", s.forgot + "回", f1(C.forgotMean) + "回", rankTxt(s.rankForgot, C.rankN))
+      + cmpChip("平均の時刻", s.avg || "―", C.timeMean == null ? "―" : Domain.hhmm(C.timeMean), rankTxt(s.rankTime, C.timeN))
+      + '</div>';
+    var rows = SD.itemNames.map(function(nm){
+      var pi = s.perItem[nm], ic = (SD.itemClass || {})[nm] || {};
+      if(!pi) return '<tr><td>' + esc(nm) + '</td><td colspan="8" class="sd-none">対象なし</td></tr>';
+      return '<tr><td>' + esc(nm) + '</td><td class="num">' + pi.sub + ' / ' + pi.req + '</td>'
+        + '<td class="num">' + pi.rest + '</td><td class="num">' + pi.forgot + '</td><td class="num">' + pi.doing + '</td>'
+        + '<td class="num">' + pct(pi.rate) + '</td><td class="num">' + (pi.avg || "―") + '</td>'
+        + '<td class="num">' + pct(ic.rateMean) + '</td><td class="num">' + rankTxt(pi.rank, ic.n) + '</td></tr>';
+    }).join("");
+    var total = '<tr class="sd-total"><td>合計</td><td class="num">' + s.submitted + ' / ' + s.required + '</td>'
+      + '<td class="num">' + s.rest + '</td><td class="num">' + s.forgot + '</td><td class="num">' + s.doing + '</td>'
+      + '<td class="num">' + pct(s.rate) + '</td><td class="num">' + (s.avg || "―") + '</td>'
+      + '<td class="num">' + pct(C.rateMean) + '</td><td class="num">' + rankTxt(s.rank, C.rankN) + '</td></tr>';
+    return '<div class="sd-card">'
+      + '<div class="sd-head"><b class="sd-name">' + s.no + '番 ' + esc(s.name) + '</b>'
+      + (s.flag ? '<span class="mk flag">' + icon("flag") + '印</span>' : '')
+      + '<span class="sd-meta">' + esc(sdRangeLabel()) + '・集計 ' + SD.dates.length + '日</span>'
+      + (s.streak ? '<span class="sd-meta">連続未提出 ' + s.streak + '日</span>' : '')
+      + '</div>' + cmp
+      + '<table class="tbl sdtbl"><thead><tr><th>品目</th><th class="num">提出/出す数</th><th class="num">休</th>'
+      + '<th class="num">忘</th><th class="num">△</th><th class="num">提出率</th><th class="num">平均時刻</th>'
+      + '<th class="num">クラス平均</th><th class="num">クラス内順位</th></tr></thead>'
+      + '<tbody>' + rows + '</tbody><tfoot>' + total + '</tfoot></table></div>';
+  }
+  function cmpChip(label, me, cl, rank){
+    return '<div class="sd-cmpItem"><span class="sd-l">' + esc(label) + '</span>'
+      + '<span class="sd-v">' + me + '</span>'
+      + '<span class="sd-s">クラス平均 ' + cl + '</span>'
+      + '<span class="sd-r">' + icon("flag") + '順位 ' + rank + '</span></div>';
+  }
+  function studentHtml(){
+    if(!SD.students.length)
+      return '<div class="sec"><h2>' + icon("user") + '児童の詳細</h2>'
+        + '<div class="empty-msg">名簿がまだありません。「名簿と品目」で登録してください。</div></div>';
+    var s = SD.students.filter(function(x){ return x.no === sdNo; })[0] || SD.students[0];
+    sdNo = s.no;
+    var idx = SD.students.indexOf(s);
+    var opts = SD.students.map(function(x){
+      return '<option value="' + x.no + '"' + (x.no === s.no ? ' selected' : '') + '>' + x.no + ' ' + esc(x.name) + '</option>';
+    }).join("");
+    return '<div class="sec"><h2>' + icon("user") + '児童の詳細</h2><div class="line">'
+      + '<button class="btn" data-t="sd-prev"' + (idx <= 0 ? ' disabled' : '') + '>' + icon("left") + '前</button>'
+      + '<label class="field">児童<select id="sd-no" class="sd-sel">' + opts + '</select></label>'
+      + '<button class="btn" data-t="sd-next"' + (idx >= SD.students.length - 1 ? ' disabled' : '') + '>次' + icon("right") + '</button>'
+      + '<label class="field">期間<input type="date" id="sd-from" value="' + esc(SD.from) + '"></label>'
+      + '<label class="field">〜<input type="date" id="sd-to" value="' + esc(SD.to) + '"></label>'
+      + '<button class="btn" data-t="sd-run">' + icon("sync") + '集計しなおす</button>'
+      + '<div class="grow"></div>'
+      + '<button class="btn" data-t="sd-print">' + icon("print") + 'この児童を印刷</button>'
+      + '<button class="btn primary" data-t="sd-print-all">' + icon("print") + '全員分を印刷（' + SD.students.length + '枚）</button>'
+      + '</div>'
+      + (SD.dates.length
+         ? '<p class="note">提出は ○と休、免除・欠席の日は分母に入れません。順位は提出率の高い順（忘・時刻はそれぞれ少ない順・早い順）です。</p>'
+         : '')
+      + '</div>'
+      + (SD.dates.length ? '<div class="sec">' + sdCardHtml(s) + '</div>'
+         : '<div class="sec"><div class="empty-msg">この期間に集計対象の日がありません。</div></div>');
+  }
+  /* 印刷。#hs-print に「1人1ページ」を組み、window.print() で出す */
+  function printStudents(list){
+    var old = document.getElementById("hs-print");
+    if(old) old.remove();
+    var d = document.createElement("div");
+    d.id = "hs-print";
+    d.innerHTML = list.map(function(x){
+      return '<div class="pp"><div class="pp-title">宿題チェック — 児童の提出状況</div>'
+        + sdCardHtml(x)
+        + '<div class="pp-note">提出は ○と休、免除・欠席の日は分母に入れません。'
+        + '順位は提出率の高い順（忘・時刻はそれぞれ少ない順・早い順）です。</div></div>';
+    }).join("");
+    document.body.appendChild(d);
+    window.print();
+  }
+  function openStudent(no){
+    tab = "student"; sdNo = Number(no) || null;
+    if(!SD) return loadStudents(ST ? ST.from : "", ST ? ST.to : "");
+    show();
   }
 
   /* ────────── 免除 ────────── */
@@ -2292,6 +2492,20 @@ var Teacher = (function(){
     if(t === "slots-more"){ var g = b.closest(".slots, table"); if(g) g.classList.toggle("xopen"); return; }
     if(t === "save-abs") return saveAbs();
     if(t === "stats-run") return loadStats($("#st-from").value, $("#st-to").value, $("#st-item").value);
+    if(t === "open-student") return openStudent(b.getAttribute("data-no"));
+    if(t === "sd-run") return loadStudents($("#sd-from").value, $("#sd-to").value);
+    if(t === "sd-prev" || t === "sd-next"){
+      var i = SD.students.findIndex(function(x){ return x.no === sdNo; });
+      var nx = SD.students[i + (t === "sd-next" ? 1 : -1)];
+      if(nx){ sdNo = nx.no; show(); }
+      return;
+    }
+    if(t === "sd-print"){
+      var cur = SD && SD.students.filter(function(x){ return x.no === sdNo; })[0];
+      if(cur) printStudents([cur]);
+      return;
+    }
+    if(t === "sd-print-all") return printStudents(SD.students);
     if(t === "ex-add"){
       SU.exemptions = readExempt();
       SU.exemptions.push({no:SU.roster[0].no, slot:0, from:D ? D.today : "", to:"", memo:""});
@@ -2328,6 +2542,7 @@ var Teacher = (function(){
     if(!active || !root.contains(e.target)) return;
     if(e.target.id === "st-sort"){ sortBy = e.target.value; show(); }
     if(e.target.id === "st-item") return loadStats($("#st-from").value, $("#st-to").value, e.target.value);
+    if(e.target.id === "sd-no"){ sdNo = Number(e.target.value); show(); }
     if(e.target.matches("[data-slot]") || e.target.matches("[data-pslot]"))
       e.target.closest(".slot").classList.toggle("on", e.target.checked);
   }
@@ -2336,7 +2551,7 @@ var Teacher = (function(){
 
   function mount(el, o){
     root = el; opts = o || {}; active = true;
-    tab = "home"; D = SU = ST = null; H1 = H2 = null; logs = null; date = "";
+    tab = "home"; D = SU = ST = SD = null; sdNo = null; H1 = H2 = null; logs = null; date = "";
     try{ bgTheme = localStorage.getItem("hs-bg") || "grad"; }catch(ignored){ bgTheme = "grad"; }
     show();
   }

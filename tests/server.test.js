@@ -223,6 +223,24 @@ console.log("■ 分析");
   ok("免除と欠席の日は分母から外す（3番は 3/3、欠席は休の数に入れない）", by[3].required === 3 && by[3].submitted === 3 && by[3].rest === 0, by[3]);
   ok("先生が後から付けた印は時刻の平均に入れない", by[3].avg === "8:10", by[3].avg);
   ok("品目ごとの数", by[2].perItem["漢字ドリル"].sub === 1 && by[2].perItem["漢字ドリル"].req === 4, by[2].perItem);
+  /* 児童の詳細画面が使う：品目ごとの状態別の数・時刻・順位、クラスの代表値 */
+  ok("品目ごとの状態別の数", by[2].perItem["漢字ドリル"].forgot === 1 && by[2].perItem["漢字ドリル"].doing === 1
+     && by[2].perItem["漢字ドリル"].rest === 0 && by[2].perItem["計算ドリル"].forgot === 0, by[2].perItem);
+  ok("品目ごとの率・時刻・先生の印を除く", by[1].perItem["漢字ドリル"].rate === 1 && by[1].perItem["漢字ドリル"].avg === "8:00"
+     && by[3].perItem["漢字ドリル"].avg === "8:10", by[3].perItem);
+  ok("品目ごとの順位（同率は同じ番号・空白も分母に入るので19番は最下位）", by[1].perItem["漢字ドリル"].rank === 1
+     && by[3].perItem["漢字ドリル"].rank === 1 && by[2].perItem["漢字ドリル"].rank === 3
+     && by[19].perItem["漢字ドリル"].rank === 4, by[19].perItem["漢字ドリル"]);
+  ok("免除だけの品目は持たない", !by[3].perItem["計算ドリル"], by[3].perItem);
+  ok("全体の順位（出すべき数 0 の子だけ対象外）", by[1].rank === 1 && by[3].rank === 1 && by[2].rank === 3
+     && by[19].rank === 4 && r.classAgg.rankN === 4, {r3:by[3].rank, r19:by[19].rank});
+  ok("忘・時刻の順位（少ない・早いが先頭・時刻なしは対象外）", by[3].rankForgot === 1 && by[1].rankForgot === 1 && by[2].rankForgot === 4
+     && by[19].rankForgot === 1 && by[19].rankTime == null
+     && by[3].rankTime === 2 && by[1].rankTime === 1 && by[2].rankTime === 3, {t3:by[3].rankTime, t1:by[1].rankTime, t2:by[2].rankTime});
+  ok("クラスの代表値", Math.abs(r.classAgg.rateMean - 0.5625) < 1e-9 && r.classAgg.rateMed === 0.625
+     && Math.abs(r.classAgg.forgotMean - 0.25) < 1e-9 && r.classAgg.timeN === 3, r.classAgg);
+  ok("クラスの品目ごとの平均", r.itemClass["漢字ドリル"].n === 4 && Math.abs(r.itemClass["漢字ドリル"].rateMean - 0.5625) < 1e-9
+     && r.itemClass["計算ドリル"].n === 3 && Math.abs(r.itemClass["計算ドリル"].rateMean - 0.4166666666666667) < 1e-9, r.itemClass);
   const kanji = s.apiStats("", "", "漢字ドリル");
   const math = s.apiStats("", "", "計算ドリル");
   const k1 = kanji.students.find(x => x.no === 1), m1 = math.students.find(x => x.no === 1);
