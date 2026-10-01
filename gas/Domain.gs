@@ -235,7 +235,18 @@ var Domain = (function(){
        rate      submitted / required（required が 0 なら null）
        avgMin / medMin  出した時刻の平均・中央値（先生が後から付けた印は除く）
        streak    いちばん新しい日から数えて、続けて出し忘れた日の数
-       flag      rate が目安より低い、または streak が目安以上 */
+       flag      rate が目安より低い、または streak が目安以上
+       rank / rankForgot / rankTime  クラス内の順位（高い率・少ない忘・早い時刻が先頭。
+                 同率は同じ番号。出すべき数が 0 の子・時刻の無い子は対象外）
+       perItem[品目名]  その品目だけの絶対値（req/sub/rest/forgot/doing）と
+                 平均（rate/avgMin/medMin）と順位（rank）
+     あわせてクラス全体の代表値（classAgg）と品目ごとのクラス平均（itemClass）を返す */
+  function mean(a){ return a.length ? a.reduce(function(x, y){ return x + y; }, 0) / a.length : null; }
+  function median(a){
+    if(!a.length) return null;
+    var s = a.slice().sort(function(x, y){ return x - y; }), i = Math.floor(s.length / 2);
+    return s.length % 2 ? s[i] : (s[i - 1] + s[i]) / 2;
+  }
   function stats(opts){
     var from = opts.from || "", to = opts.to || "9999-99-99";
     function selected(it){ return !opts.item || it.name === opts.item; }
@@ -269,14 +280,15 @@ var Domain = (function(){
           if(m && m.via === "absent") return;   /* 欠席の日は出すべき数に入れない */
           var s = m ? m.state : "";
           dayReq++; req++;
-          if(!perItem[it.name]){ perItem[it.name] = {req:0, sub:0}; if(itemNames.indexOf(it.name) < 0) itemNames.push(it.name); }
+          if(!perItem[it.name]){ perItem[it.name] = {req:0, sub:0, rest:0, forgot:0, doing:0, mins:[]};
+            if(itemNames.indexOf(it.name) < 0) itemNames.push(it.name); }
           perItem[it.name].req++;
-          if(s in n) n[s]++;
+          if(s in n){ n[s]++; perItem[it.name][s]++; }
           if(counts(s)){
             daySub++; sub++; perItem[it.name].sub++;
             if(s === "on" && m.via !== "teacher"){
               var mm = stampMinutes(m.at);
-              if(mm != null) mins.push(mm);
+              if(mm != null){ mins.push(mm); perItem[it.name].mins.push(mm); }
             }
           }
         });
@@ -285,13 +297,14 @@ var Domain = (function(){
       var streak = 0;
       for(var i = dayMiss.length - 1; i >= 0 && dayMiss[i].missed; i--) streak++;
       var rate = req ? sub / req : null;
-      var avg = mins.length ? mins.reduce(function(a, b){ return a + b; }, 0) / mins.length : null;
-      var sorted = mins.slice().sort(function(a, b){ return a - b; });
-      var med = null;
-      if(sorted.length){
-        var h = Math.floor(sorted.length / 2);
-        med = sorted.length % 2 ? sorted[h] : (sorted[h - 1] + sorted[h]) / 2;
-      }
+      var avg = mean(mins), med = median(mins);
+      Object.keys(perItem).forEach(function(nm){
+        var pi = perItem[nm];
+        pi.rate = pi.req ? pi.sub / pi.req : null;
+        pi.avgMin = mean(pi.mins); pi.medMin = median(pi.mins);
+        pi.avg = hhmm(pi.avgMin); pi.med = hhmm(pi.medMin);
+        delete pi.mins;
+      });
       var lowRate = rate != null && rate < rateMin;
       var longStreak = streak >= streakMin;
       return {no:st.no, name:st.name, required:req, submitted:sub, rate:rate,
@@ -300,8 +313,43 @@ var Domain = (function(){
               streak:streak, perItem:perItem,
               lowRate:lowRate, longStreak:longStreak, flag: lowRate || longStreak};
     });
+    /* クラスとの比較・クラス内の順位。出すべき数 0 の子は順位を付けない */
+    var ranked = students.filter(function(s){ return s.rate != null; });
+    var timed = students.filter(function(s){ return s.avgMin != null; });
+    students.forEach(function(s){
+      if(s.rate != null){
+        s.rank = 1 + ranked.filter(function(o){ return o.rate > s.rate; }).length;
+        s.rankForgot = 1 + ranked.filter(function(o){ return o.forgot < s.forgot; }).length;
+        if(s.avgMin != null)
+          s.rankTime = 1 + timed.filter(function(o){ return o.avgMin < s.avgMin; }).length;
+      }
+      Object.keys(s.perItem).forEach(function(nm){
+        s.perItem[nm].rank = 1 + students.filter(function(o){
+          var q = o.perItem[nm]; return q && q.rate != null && q.rate > s.perItem[nm].rate;
+        }).length;
+      });
+    });
+    var itemClass = {};
+    itemNames.forEach(function(nm){
+      var rs = [], avs = [];
+      students.forEach(function(s){
+        var pi = s.perItem[nm];
+        if(!pi) return;
+        if(pi.rate != null) rs.push(pi.rate);
+        if(pi.avgMin != null) avs.push(pi.avgMin);
+      });
+      itemClass[nm] = {n:rs.length, rateMean:mean(rs), avgMinMean:mean(avs)};
+    });
+    var classAgg = {
+      n:students.length, rankN:ranked.length, timeN:timed.length,
+      rateMean:mean(ranked.map(function(s){ return s.rate; })),
+      rateMed:median(ranked.map(function(s){ return s.rate; })),
+      timeMean:mean(timed.map(function(s){ return s.avgMin; })),
+      timeMed:median(students.map(function(s){ return s.medMin; }).filter(function(v){ return v != null; })),
+      forgotMean:mean(students.map(function(s){ return s.forgot; }))
+    };
     return {dates:dates, itemNames:itemNames, students:students,
-            rateMin:rateMin, streakMin:streakMin};
+            rateMin:rateMin, streakMin:streakMin, classAgg:classAgg, itemClass:itemClass};
   }
 
   /* ── 名簿の貼り付け ───────────────────────

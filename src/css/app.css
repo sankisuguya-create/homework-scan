@@ -274,3 +274,57 @@ textarea{border:var(--thin);border-radius:6px;padding:10px;font-size:18px;width:
 .teacher .slotmore-r td{text-align:center;padding:4px}
 .teacher .slots{gap:10px}
 .teacher .slot{padding:8px}
+
+/* ================= 児童の詳細カード（先生の画面・印刷で共通） =================
+   768px 級の画面でもスクロールせず収めるため、操作行は1行・比較は横並びの帯・
+   表は行高を詰める */
+.linklike{border:0;background:transparent;font:inherit;font-weight:700;text-decoration:underline;
+  text-underline-offset:3px;padding:0;cursor:pointer;color:inherit}
+.linklike:hover{color:var(--done)}
+.sd-sec{padding:10px 16px 6px;gap:6px}
+.sd-h{margin:0;font-size:18px;white-space:nowrap;display:inline-flex;align-items:center;gap:6px;border-bottom:0;padding-bottom:0}
+.sd-h .ic{width:20px;height:20px}
+.sd-ctl{gap:8px}
+.sd-ctl .btn{min-height:36px;padding:4px 12px;font-size:15px}
+.sd-ctl .field{font-size:14px}
+.sd-ctl input[type="date"]{padding:3px 8px;font-size:15px;min-height:0;width:auto}
+.sd-note{font-size:13px;color:var(--sub);flex-basis:100%}
+.sd-card{display:flex;flex-direction:column;gap:4px}
+.sd-head{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.sd-name{font-size:20px}
+.sd-meta{font-size:13px;font-weight:700;color:var(--sub)}
+.sd-cmp{display:flex;gap:14px;flex-wrap:wrap;align-items:baseline}
+.sd-cmpItem{display:inline-flex;align-items:baseline;gap:6px;border:var(--thin);border-radius:999px;
+  padding:2px 11px;background:var(--paper)}
+.sd-l{font-size:13px;font-weight:700;color:var(--sub)}
+.sd-v{font-size:17px;font-weight:800;font-variant-numeric:tabular-nums}
+.sd-s{font-size:12px;font-weight:700;color:var(--sub)}
+.sd-r{display:inline-flex;align-items:center;gap:3px;font-size:13px;font-weight:800;color:var(--ink)}
+.sd-r .ic{width:13px;height:13px}
+.sdtbl{font-size:14px;width:100%}
+.sdtbl th,.sdtbl td{padding:1px 6px;white-space:nowrap}
+.sdtbl .sd-none{color:var(--sub);text-align:center}
+.sdtbl .sd-total td{font-weight:800;border-top:2px solid var(--ink)}
+.sd-sel{min-width:8em;padding:4px 8px;font-size:15px;min-height:0}
+
+/* ================= 印刷（児童の詳細。1人1ページ） =================
+   画面では #hs-print を隠し、印刷時は #hs-print だけを出す。
+   .pp が1人分のページ。薄い色は印刷で消えるので黒・白だけで組む */
+#hs-print{display:none}
+@media print{
+  body{background:#fff}
+  body > *:not(#hs-print){display:none!important}
+  #hs-print{display:block!important;color:#000}
+  #hs-print .pp{page-break-after:always;padding:6mm 0}
+  #hs-print .pp:last-child{page-break-after:auto}
+  .pp-title{font-size:14px;font-weight:700;border-bottom:3px solid #000;padding-bottom:4px;margin-bottom:10px}
+  #hs-print .sd-name{font-size:22px}
+  #hs-print .sd-meta,#hs-print .sd-l,#hs-print .sd-s{color:#000}
+  #hs-print .sd-v{font-size:20px}
+  #hs-print .sd-cmpItem{border:2px solid #000;padding:6px 10px;background:#fff}
+  #hs-print .sd-r .ic{width:14px;height:14px}
+  #hs-print .sdtbl{font-size:14px}
+  #hs-print .sdtbl thead th{background:#000;color:#fff}
+  #hs-print .sdtbl th,#hs-print .sdtbl td{border:1.5px solid #000}
+  .pp-note{font-size:12px;margin-top:8px}
+}
