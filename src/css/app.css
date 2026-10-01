@@ -276,27 +276,34 @@ textarea{border:var(--thin);border-radius:6px;padding:10px;font-size:18px;width:
 .teacher .slot{padding:8px}
 
 /* ================= 児童の詳細カード（先生の画面・印刷で共通） =================
-   一画面に収めるため、行を横に並べ、カード内は縦に詰める */
+   768px 級の画面でもスクロールせず収めるため、操作行は1行・比較は横並びの帯・
+   表は行高を詰める */
 .linklike{border:0;background:transparent;font:inherit;font-weight:700;text-decoration:underline;
   text-underline-offset:3px;padding:0;cursor:pointer;color:inherit}
 .linklike:hover{color:var(--done)}
-.sd-card{display:flex;flex-direction:column;gap:10px}
-.sd-head{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
-.sd-name{font-size:26px}
-.sd-meta{font-size:16px;font-weight:700;color:var(--sub)}
-.sd-cmp{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
-.sd-cmpItem{display:flex;flex-direction:column;gap:2px;border:var(--thin);border-radius:12px;
-  padding:8px 12px;background:var(--paper)}
-.sd-l{font-size:15px;font-weight:700;color:var(--sub)}
-.sd-v{font-size:26px;font-weight:800;font-variant-numeric:tabular-nums}
-.sd-s{font-size:15px;font-weight:700;color:var(--sub)}
-.sd-r{display:inline-flex;align-items:center;gap:4px;font-size:15px;font-weight:800;color:var(--ink)}
-.sd-r .ic{width:16px;height:16px}
-.sdtbl{font-size:17px;width:100%}
-.sdtbl th,.sdtbl td{padding:4px 8px;white-space:nowrap}
+.sd-sec h2{margin-bottom:6px}
+.sd-ctl{gap:8px}
+.sd-ctl .btn{min-height:38px;padding:5px 13px;font-size:15px}
+.sd-ctl .field{font-size:14px}
+.sd-ctl input[type="date"]{padding:4px 8px;font-size:15px;min-height:0;width:auto}
+.sd-note{font-size:14px;margin:4px 0 0}
+.sd-card{display:flex;flex-direction:column;gap:6px}
+.sd-head{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.sd-name{font-size:22px}
+.sd-meta{font-size:14px;font-weight:700;color:var(--sub)}
+.sd-cmp{display:flex;gap:18px;flex-wrap:wrap;align-items:baseline}
+.sd-cmpItem{display:inline-flex;align-items:baseline;gap:7px;border:var(--thin);border-radius:999px;
+  padding:3px 13px;background:var(--paper)}
+.sd-l{font-size:14px;font-weight:700;color:var(--sub)}
+.sd-v{font-size:19px;font-weight:800;font-variant-numeric:tabular-nums}
+.sd-s{font-size:13px;font-weight:700;color:var(--sub)}
+.sd-r{display:inline-flex;align-items:center;gap:3px;font-size:14px;font-weight:800;color:var(--ink)}
+.sd-r .ic{width:14px;height:14px}
+.sdtbl{font-size:15px;width:100%}
+.sdtbl th,.sdtbl td{padding:2px 6px;white-space:nowrap}
 .sdtbl .sd-none{color:var(--sub);text-align:center}
 .sdtbl .sd-total td{font-weight:800;border-top:2px solid var(--ink)}
-.sd-sel{min-width:9em}
+.sd-sel{min-width:8em;padding:4px 8px;font-size:15px;min-height:0}
 
 /* ================= 印刷（児童の詳細。1人1ページ） =================
    画面では #hs-print を隠し、印刷時は #hs-print だけを出す。

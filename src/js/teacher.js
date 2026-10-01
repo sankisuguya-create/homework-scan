@@ -345,12 +345,19 @@ var Teacher = (function(){
     return SD.from + " 〜 " + SD.to;
   }
   /* 1人分のカード。画面にも印刷用ページにも同じものを出す */
+  /* 比較を1行で：本人の値（大きく）＋クラス平均＋順位 */
+  function sdChip(label, me, cl, rank){
+    return '<span class="sd-cmpItem"><span class="sd-l">' + esc(label) + '</span>'
+      + '<b class="sd-v">' + me + '</b>'
+      + '<span class="sd-s">' + cl + '</span>'
+      + '<span class="sd-r">' + icon("flag") + rank + '</span></span>';
+  }
   function sdCardHtml(s){
     var C = SD.classAgg || {};
     var cmp = '<div class="sd-cmp">'
-      + cmpChip("提出率", pct(s.rate), pct(C.rateMean), rankTxt(s.rank, C.rankN))
-      + cmpChip("忘れた回数", s.forgot + "回", f1(C.forgotMean) + "回", rankTxt(s.rankForgot, C.rankN))
-      + cmpChip("平均の時刻", s.avg || "―", C.timeMean == null ? "―" : Domain.hhmm(C.timeMean), rankTxt(s.rankTime, C.timeN))
+      + sdChip("提出率", pct(s.rate), pct(C.rateMean), rankTxt(s.rank, C.rankN))
+      + sdChip("忘れた回数", s.forgot + "回", f1(C.forgotMean) + "回", rankTxt(s.rankForgot, C.rankN))
+      + sdChip("平均の時刻", s.avg || "―", C.timeMean == null ? "―" : Domain.hhmm(C.timeMean), rankTxt(s.rankTime, C.timeN))
       + '</div>';
     var rows = SD.itemNames.map(function(nm){
       var pi = s.perItem[nm], ic = (SD.itemClass || {})[nm] || {};
@@ -375,12 +382,6 @@ var Teacher = (function(){
       + '<th class="num">クラス平均</th><th class="num">クラス内順位</th></tr></thead>'
       + '<tbody>' + rows + '</tbody><tfoot>' + total + '</tfoot></table></div>';
   }
-  function cmpChip(label, me, cl, rank){
-    return '<div class="sd-cmpItem"><span class="sd-l">' + esc(label) + '</span>'
-      + '<span class="sd-v">' + me + '</span>'
-      + '<span class="sd-s">クラス平均 ' + cl + '</span>'
-      + '<span class="sd-r">' + icon("flag") + '順位 ' + rank + '</span></div>';
-  }
   function studentHtml(){
     if(!SD.students.length)
       return '<div class="sec"><h2>' + icon("user") + '児童の詳細</h2>'
@@ -391,7 +392,7 @@ var Teacher = (function(){
     var opts = SD.students.map(function(x){
       return '<option value="' + x.no + '"' + (x.no === s.no ? ' selected' : '') + '>' + x.no + ' ' + esc(x.name) + '</option>';
     }).join("");
-    return '<div class="sec"><h2>' + icon("user") + '児童の詳細</h2><div class="line">'
+    return '<div class="sec sd-sec"><h2>' + icon("user") + '児童の詳細</h2><div class="line sd-ctl">'
       + '<button class="btn" data-t="sd-prev"' + (idx <= 0 ? ' disabled' : '') + '>' + icon("left") + '前</button>'
       + '<label class="field">児童<select id="sd-no" class="sd-sel">' + opts + '</select></label>'
       + '<button class="btn" data-t="sd-next"' + (idx >= SD.students.length - 1 ? ' disabled' : '') + '>次' + icon("right") + '</button>'

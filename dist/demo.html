@@ -286,27 +286,34 @@ textarea{border:var(--thin);border-radius:6px;padding:10px;font-size:18px;width:
 .teacher .slot{padding:8px}
 
 /* ================= 児童の詳細カード（先生の画面・印刷で共通） =================
-   一画面に収めるため、行を横に並べ、カード内は縦に詰める */
+   768px 級の画面でもスクロールせず収めるため、操作行は1行・比較は横並びの帯・
+   表は行高を詰める */
 .linklike{border:0;background:transparent;font:inherit;font-weight:700;text-decoration:underline;
   text-underline-offset:3px;padding:0;cursor:pointer;color:inherit}
 .linklike:hover{color:var(--done)}
-.sd-card{display:flex;flex-direction:column;gap:10px}
-.sd-head{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
-.sd-name{font-size:26px}
-.sd-meta{font-size:16px;font-weight:700;color:var(--sub)}
-.sd-cmp{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
-.sd-cmpItem{display:flex;flex-direction:column;gap:2px;border:var(--thin);border-radius:12px;
-  padding:8px 12px;background:var(--paper)}
-.sd-l{font-size:15px;font-weight:700;color:var(--sub)}
-.sd-v{font-size:26px;font-weight:800;font-variant-numeric:tabular-nums}
-.sd-s{font-size:15px;font-weight:700;color:var(--sub)}
-.sd-r{display:inline-flex;align-items:center;gap:4px;font-size:15px;font-weight:800;color:var(--ink)}
-.sd-r .ic{width:16px;height:16px}
-.sdtbl{font-size:17px;width:100%}
-.sdtbl th,.sdtbl td{padding:4px 8px;white-space:nowrap}
+.sd-sec h2{margin-bottom:6px}
+.sd-ctl{gap:8px}
+.sd-ctl .btn{min-height:38px;padding:5px 13px;font-size:15px}
+.sd-ctl .field{font-size:14px}
+.sd-ctl input[type="date"]{padding:4px 8px;font-size:15px;min-height:0;width:auto}
+.sd-note{font-size:14px;margin:4px 0 0}
+.sd-card{display:flex;flex-direction:column;gap:6px}
+.sd-head{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.sd-name{font-size:22px}
+.sd-meta{font-size:14px;font-weight:700;color:var(--sub)}
+.sd-cmp{display:flex;gap:18px;flex-wrap:wrap;align-items:baseline}
+.sd-cmpItem{display:inline-flex;align-items:baseline;gap:7px;border:var(--thin);border-radius:999px;
+  padding:3px 13px;background:var(--paper)}
+.sd-l{font-size:14px;font-weight:700;color:var(--sub)}
+.sd-v{font-size:19px;font-weight:800;font-variant-numeric:tabular-nums}
+.sd-s{font-size:13px;font-weight:700;color:var(--sub)}
+.sd-r{display:inline-flex;align-items:center;gap:3px;font-size:14px;font-weight:800;color:var(--ink)}
+.sd-r .ic{width:14px;height:14px}
+.sdtbl{font-size:15px;width:100%}
+.sdtbl th,.sdtbl td{padding:2px 6px;white-space:nowrap}
 .sdtbl .sd-none{color:var(--sub);text-align:center}
 .sdtbl .sd-total td{font-weight:800;border-top:2px solid var(--ink)}
-.sd-sel{min-width:9em}
+.sd-sel{min-width:8em;padding:4px 8px;font-size:15px;min-height:0}
 
 /* ================= 印刷（児童の詳細。1人1ページ） =================
    画面では #hs-print を隠し、印刷時は #hs-print だけを出す。
@@ -2232,12 +2239,19 @@ var Teacher = (function(){
     return SD.from + " 〜 " + SD.to;
   }
   /* 1人分のカード。画面にも印刷用ページにも同じものを出す */
+  /* 比較を1行で：本人の値（大きく）＋クラス平均＋順位 */
+  function sdChip(label, me, cl, rank){
+    return '<span class="sd-cmpItem"><span class="sd-l">' + esc(label) + '</span>'
+      + '<b class="sd-v">' + me + '</b>'
+      + '<span class="sd-s">' + cl + '</span>'
+      + '<span class="sd-r">' + icon("flag") + rank + '</span></span>';
+  }
   function sdCardHtml(s){
     var C = SD.classAgg || {};
     var cmp = '<div class="sd-cmp">'
-      + cmpChip("提出率", pct(s.rate), pct(C.rateMean), rankTxt(s.rank, C.rankN))
-      + cmpChip("忘れた回数", s.forgot + "回", f1(C.forgotMean) + "回", rankTxt(s.rankForgot, C.rankN))
-      + cmpChip("平均の時刻", s.avg || "―", C.timeMean == null ? "―" : Domain.hhmm(C.timeMean), rankTxt(s.rankTime, C.timeN))
+      + sdChip("提出率", pct(s.rate), pct(C.rateMean), rankTxt(s.rank, C.rankN))
+      + sdChip("忘れた回数", s.forgot + "回", f1(C.forgotMean) + "回", rankTxt(s.rankForgot, C.rankN))
+      + sdChip("平均の時刻", s.avg || "―", C.timeMean == null ? "―" : Domain.hhmm(C.timeMean), rankTxt(s.rankTime, C.timeN))
       + '</div>';
     var rows = SD.itemNames.map(function(nm){
       var pi = s.perItem[nm], ic = (SD.itemClass || {})[nm] || {};
@@ -2262,12 +2276,6 @@ var Teacher = (function(){
       + '<th class="num">クラス平均</th><th class="num">クラス内順位</th></tr></thead>'
       + '<tbody>' + rows + '</tbody><tfoot>' + total + '</tfoot></table></div>';
   }
-  function cmpChip(label, me, cl, rank){
-    return '<div class="sd-cmpItem"><span class="sd-l">' + esc(label) + '</span>'
-      + '<span class="sd-v">' + me + '</span>'
-      + '<span class="sd-s">クラス平均 ' + cl + '</span>'
-      + '<span class="sd-r">' + icon("flag") + '順位 ' + rank + '</span></div>';
-  }
   function studentHtml(){
     if(!SD.students.length)
       return '<div class="sec"><h2>' + icon("user") + '児童の詳細</h2>'
@@ -2278,7 +2286,7 @@ var Teacher = (function(){
     var opts = SD.students.map(function(x){
       return '<option value="' + x.no + '"' + (x.no === s.no ? ' selected' : '') + '>' + x.no + ' ' + esc(x.name) + '</option>';
     }).join("");
-    return '<div class="sec"><h2>' + icon("user") + '児童の詳細</h2><div class="line">'
+    return '<div class="sec sd-sec"><h2>' + icon("user") + '児童の詳細</h2><div class="line sd-ctl">'
       + '<button class="btn" data-t="sd-prev"' + (idx <= 0 ? ' disabled' : '') + '>' + icon("left") + '前</button>'
       + '<label class="field">児童<select id="sd-no" class="sd-sel">' + opts + '</select></label>'
       + '<button class="btn" data-t="sd-next"' + (idx >= SD.students.length - 1 ? ' disabled' : '') + '>次' + icon("right") + '</button>'
