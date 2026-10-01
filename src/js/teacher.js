@@ -392,7 +392,7 @@ var Teacher = (function(){
     var opts = SD.students.map(function(x){
       return '<option value="' + x.no + '"' + (x.no === s.no ? ' selected' : '') + '>' + x.no + ' ' + esc(x.name) + '</option>';
     }).join("");
-    return '<div class="sec sd-sec"><h2>' + icon("user") + '児童の詳細</h2><div class="line sd-ctl">'
+    return '<div class="sec sd-sec"><div class="line sd-ctl"><h2 class="sd-h">' + icon("user") + '児童の詳細</h2>'
       + '<button class="btn" data-t="sd-prev"' + (idx <= 0 ? ' disabled' : '') + '>' + icon("left") + '前</button>'
       + '<label class="field">児童<select id="sd-no" class="sd-sel">' + opts + '</select></label>'
       + '<button class="btn" data-t="sd-next"' + (idx >= SD.students.length - 1 ? ' disabled' : '') + '>次' + icon("right") + '</button>'
@@ -404,10 +404,10 @@ var Teacher = (function(){
       + '<button class="btn primary" data-t="sd-print-all">' + icon("print") + '全員分を印刷（' + SD.students.length + '枚）</button>'
       + '</div>'
       + (SD.dates.length
-         ? '<p class="note">提出は ○と休、免除・欠席の日は分母に入れません。順位は提出率の高い順（忘・時刻はそれぞれ少ない順・早い順）です。</p>'
+         ? '<p class="note sd-note">提出は ○と休。免除・欠席の日は分母に入れません。順位は提出率の高い順（忘・時刻はそれぞれ少ない順・早い順）。</p>'
          : '')
       + '</div>'
-      + (SD.dates.length ? '<div class="sec">' + sdCardHtml(s) + '</div>'
+      + (SD.dates.length ? '<div class="sec sd-sec">' + sdCardHtml(s) + '</div>'
          : '<div class="sec"><div class="empty-msg">この期間に集計対象の日がありません。</div></div>');
   }
   /* 印刷。#hs-print に「1人1ページ」を組み、window.print() で出す */
