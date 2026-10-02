@@ -1,7 +1,8 @@
 /* ==================================================================
    係の画面。当日の「だれが・何を出したか」の表だけを出す。
 
-   ■ 番号順に10人ずつ、左から3列（31人目以降は3列目に続ける）
+   ■ 番号順に3列。1列の人数は児童数に応じて自動で増える（36人まで崩れない）
+   ■ 名前の枠は「番号 苗字」の1段表示。同じ苗字がいる子は苗字＋名前の一文字目
    ■ マスをタップするたびに  空白 → ○ → 休 → 忘 → △ → 空白
    ■ 免除のマスは ○ と同じ見た目（理由は係に見せない）。タップしても変わらない
    ■ タップした記録は、まずこの端末に貯めてからサーバへ送る。
@@ -26,7 +27,6 @@ var MARK_SVG = {
 function markGlyph(s){ return MARK_SVG[s] || esc(MARK[s || ""].ch); }
 
 var Helper = (function(){
-  var SPLIT = 10;
   var QKEY = "homework-scan/queue-v1", DKEY = "homework-scan/device";
   var S = null;          /* サーバから来た当日の状態 */
   var queue = loadQueue();
@@ -250,7 +250,7 @@ var Helper = (function(){
   }
   function paintSummary(){ var s = root && root.querySelector(".sum"); if(s) s.innerHTML = summaryHtml(); }
 
-  function paneHtml(list, rows, cols, cells, named, abs){
+  function paneHtml(list, rows, cols, cells, named, abs, disp){
     var h = '<div class="pane" style="--cols:' + cols + ';--rows:' + (rows + 1) + ';grid-template-rows:48px repeat(' + rows + ',minmax(0,1fr))">';
     h += '<div class="row head"><div>' + (named ? '名前' : '番号') + '</div>'
        + S.items.map(function(it){ return '<div class="' + (it.color ? "t-" + it.color : "") + '">' + icon(it.icon) + '<span>' + esc(it.name) + '</span></div>'; }).join("")
@@ -266,7 +266,7 @@ var Helper = (function(){
       h += '<div class="row' + (ab ? ' abs' : '') + '"><button type="button" class="who" data-abs="' + st.no + '"'
          + ' aria-pressed="' + ab + '" aria-label="' + st.no + 'ばん 休みの切り替え">'
          + '<span class="no">' + st.no + '</span>'
-         + (st.name ? '<span class="nm">' + esc(String(st.name).trim().split(/[\s　]+/)[0]) + '</span>' : '')
+         + (disp[st.no] ? '<span class="nm">' + esc(disp[st.no]) + '</span>' : '')
          + (ab ? '<span class="ab">休</span>' : '') + '</button>'
          + S.items.map(function(it){
              var k = st.no + ":" + it.slot;
@@ -318,17 +318,57 @@ var Helper = (function(){
       var panes = [];
       var named = S.roster.some(function(r){ return r.name; });
       var abs = absView();
+      /* 表示する名前＝苗字。同じ苗字がいる子は「苗字＋名前の一文字目」にする */
+      var seen = {}, disp = {};
+      roster.forEach(function(r){
+        var sn = String(r.name || "").trim().split(/[\s　]+/)[0] || "";
+        if(sn) seen[sn] = (seen[sn] || 0) + 1;
+      });
+      roster.forEach(function(r){
+        var p = String(r.name || "").trim().split(/[\s　]+/);
+        var sn = p[0] || "", g = p[1] || "";
+        disp[r.no] = sn && seen[sn] > 1 && g ? sn + Array.from(g)[0] : sn;
+      });
       /* 元の名前列（1.8fr）の幅を半分にし、空いた幅を提出物へ配分する。 */
       var nameFr = .9 * S.items.length / (S.items.length + .9);
       var cols = (named ? "minmax(60px," + nameFr + "fr)" : "32px") + " repeat(" + S.items.length + ",minmax(0,1fr))";
-      var rows = Math.max(SPLIT, roster.length - SPLIT * 2);
+      var rows = Math.ceil(roster.length / 3);
       for(var i = 0; i < 3; i++){
-        panes.push(paneHtml(roster.slice(i * SPLIT, i === 2 ? roster.length : (i + 1) * SPLIT), rows, cols, cells, named, abs));
+        panes.push(paneHtml(roster.slice(i * rows, (i + 1) * rows), rows, cols, cells, named, abs, disp));
       }
       body = '<div class="sumbar"><div class="sum">' + summaryHtml() + '</div></div>'
            + '<div class="panes">' + panes.join("") + '</div>';
     }
     root.innerHTML = '<div class="helper">' + head + body + '</div>';
+    fitWho();
+  }
+
+  /* 番号＋名前の1段表示を、枠からはみ出さない一番大きな字にする。
+     列の幅は固定なので、一番長い行に合わせて列ごとの大きさを決める */
+  function fitWho(){
+    var ws = root.querySelectorAll(".pane .who[data-abs]");
+    var i, w, j, mins = [];
+    for(i = 0; i < ws.length; i++) ws[i].style.fontSize = "10px";
+    for(i = 0; i < ws.length; i++){
+      w = ws[i];
+      var need = 0, kids = w.children;
+      for(j = 0; j < kids.length; j++){
+        if(kids[j].classList.contains("ab")) continue;
+        need += kids[j].scrollWidth;
+      }
+      var have = w.clientWidth - (w.parentElement.classList.contains("abs") ? 22 : 6);
+      var rh = w.parentElement.clientHeight;
+      var fs = Math.min(10 * have / Math.max(need, 1), rh * 0.58, 40);
+      var p = w.closest(".pane"), pi = Array.prototype.indexOf.call(p.parentElement.children, p);
+      if(mins[pi] === undefined || fs < mins[pi]) mins[pi] = fs;
+      w._fs = fs;
+    }
+    for(i = 0; i < ws.length; i++){
+      w = ws[i];
+      var p2 = w.closest(".pane"), pi2 = Array.prototype.indexOf.call(p2.parentElement.children, p2);
+      w.style.fontSize = Math.max(9, Math.min(w._fs, mins[pi2])) + "px";
+      delete w._fs;
+    }
   }
 
   function offnetHtml(){

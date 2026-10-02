@@ -469,7 +469,7 @@ var Teacher = (function(){
       + '<p class="note">名簿はスプレッドシートの「名簿」シートを直接編集します（この画面では直せません）。'
       + '列の並びは「メールアドレス・学年・組・番号・氏名」（算数タイムアタックと同じ）です。'
       + (SU.sheetUrl ? '<a href="' + esc(SU.sheetUrl) + '" target="_blank" rel="noopener">スプレッドシートを開く</a>' : '') + '</p>'
-      + '<p class="note">係の画面では、1〜18番が左、19番以降が右に並びます。</p>'
+      + '<p class="note">係の画面では番号順に3列で並び、1列の人数は児童数に応じて自動で増えます（36人まで表示できます）。</p>'
       + '<div style="overflow-x:auto"><table class="tbl"><thead><tr><th class="num">番号</th><th>氏名</th><th>メールアドレス</th></tr></thead><tbody>'
       + (list.length ? list.map(function(r){
           return '<tr><td class="num">' + r.no + '</td><td>' + esc(r.name) + '</td>'
