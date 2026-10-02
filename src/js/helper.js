@@ -252,20 +252,23 @@ var Helper = (function(){
 
   function paneHtml(list, rows, cols, cells, named, abs, disp){
     var h = '<div class="pane" style="--cols:' + cols + ';--rows:' + (rows + 1) + ';grid-template-rows:48px repeat(' + rows + ',minmax(0,1fr))">';
-    h += '<div class="row head"><div>' + (named ? '名前' : '番号') + '</div>'
+    h += '<div class="row head"><div>番号</div><div>' + (named ? '名前' : '') + '</div>'
        + S.items.map(function(it){ return '<div class="' + (it.color ? "t-" + it.color : "") + '">' + icon(it.icon) + '<span>' + esc(it.name) + '</span></div>'; }).join("")
        + '</div>';
     for(var i = 0; i < rows; i++){
       var st = list[i];
       if(!st){
-        h += '<div class="row empty"><div class="who"></div>'
+        h += '<div class="row empty"><div class="who"></div><div class="who"></div>'
            + S.items.map(function(it){ return '<div class="cell' + (it.color ? " t-" + it.color : "") + '"></div>'; }).join("") + '</div>';
         continue;
       }
-      var ab = !!abs[st.no];
-      h += '<div class="row' + (ab ? ' abs' : '') + '"><button type="button" class="who" data-abs="' + st.no + '"'
-         + ' aria-pressed="' + ab + '" aria-label="' + st.no + 'ばん 休みの切り替え">'
-         + '<span class="no">' + st.no + '</span>'
+      var ab = !!abs[st.no], lab = st.no + 'ばん 休みの切り替え';
+      /* 番号と名前は別のセル。背景は行と同じ・間に線は引かない。どちらを押しても休み切替 */
+      h += '<div class="row' + (ab ? ' abs' : '') + '">'
+         + '<button type="button" class="who wno" data-abs="' + st.no + '"'
+         + ' aria-pressed="' + ab + '" aria-label="' + lab + '"><span class="no">' + st.no + '</span></button>'
+         + '<button type="button" class="who wnm" data-abs="' + st.no + '"'
+         + ' aria-pressed="' + ab + '" aria-label="' + lab + '">'
          + (disp[st.no] ? '<span class="nm">' + esc(disp[st.no]) + '</span>' : '')
          + (ab ? '<span class="ab">休</span>' : '') + '</button>'
          + S.items.map(function(it){
@@ -329,9 +332,10 @@ var Helper = (function(){
         var sn = p[0] || "", g = p[1] || "";
         disp[r.no] = sn && seen[sn] > 1 && g ? sn + Array.from(g)[0] : sn;
       });
-      /* 元の名前列（1.8fr）の幅を半分にし、空いた幅を提出物へ配分する。 */
+      /* 元の名前列（1.8fr）の幅を半分にし、空いた幅を提出物へ配分する。
+         名前列はさらに「番号（左寄せ・2桁分の固定幅）＋名前（中央）」の2列に分ける（合計の幅は変えない） */
       var nameFr = .9 * S.items.length / (S.items.length + .9);
-      var cols = (named ? "minmax(60px," + nameFr + "fr)" : "32px") + " repeat(" + S.items.length + ",minmax(0,1fr))";
+      var cols = "22px minmax(36px," + nameFr + "fr) repeat(" + S.items.length + ",minmax(0,1fr))";
       var rows = Math.ceil(roster.length / 3);
       for(var i = 0; i < 3; i++){
         panes.push(paneHtml(roster.slice(i * rows, (i + 1) * rows), rows, cols, cells, named, abs, disp));
@@ -343,7 +347,7 @@ var Helper = (function(){
     fitWho();
   }
 
-  /* 番号＋名前の1段表示を、枠からはみ出さない一番大きな字にする。
+  /* 番号と名前のセルの字を、枠からはみ出さない一番大きな字にする。
      列の幅は固定なので、一番長い行に合わせて列ごとの大きさを決める */
   function fitWho(){
     var ws = root.querySelectorAll(".pane .who[data-abs]");
@@ -356,7 +360,10 @@ var Helper = (function(){
         if(kids[j].classList.contains("ab")) continue;
         need += kids[j].scrollWidth;
       }
-      var have = w.clientWidth - (w.parentElement.classList.contains("abs") ? 22 : 6);
+      var pad = w.classList.contains("wnm")
+        ? (w.parentElement.classList.contains("abs") ? 38 : 8)
+        : 8;
+      var have = w.clientWidth - pad;
       var rh = w.parentElement.clientHeight;
       var fs = Math.min(10 * have / Math.max(need, 1), rh * 0.58, 40);
       var p = w.closest(".pane"), pi = Array.prototype.indexOf.call(p.parentElement.children, p);
