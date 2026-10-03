@@ -68,6 +68,17 @@ function fresh(){
   return s;
 }
 
+console.log("■ 新しい行に1回で2マス");
+{
+  const s = fresh();
+  const d = "2026-09-25";
+  s.apiMark([{id:"ev-dup-01", date:d, no:2, slot:1, op:"on", at:T0},
+             {id:"ev-dup-02", date:d, no:2, slot:2, op:"forgot", at:T0}]);
+  const rows = s.P.rows("記録");
+  ok("行は1つだけ（二重にならない）", rows.length === 1, rows);
+  ok("2マスとも入る", rows[0][2] === "○ 8:30" && rows[0][3] === "忘 8:30", rows[0]);
+}
+
 console.log("■ 係の画面");
 {
   const s = fresh();
