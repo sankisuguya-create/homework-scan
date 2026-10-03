@@ -2304,6 +2304,7 @@ var Teacher = (function(){
 
   function show(){
     if(!active) return;
+    paneStale = false;   /* 全面描き直しで品目欄の陳腐化も解消される */
     if(tab === "home"){ if(!(H1 && H2)) return loadHome(); frame(homeHtml()); return homeArm(); }
     if(tab === "day") return D ? frame(dayHtml()) : loadDay(date);
     if(tab === "stats") return ST ? frame(statsHtml()) : loadStats();
@@ -2316,7 +2317,7 @@ var Teacher = (function(){
 
   /* ホームの「今日の未提出」は25秒ごとに静かに取り直す。
      home タブを開いていて、今日の欄があるときだけ動く（他タブの編集を邪魔しない） */
-  var homeT = null;
+  var homeT = null, paneStale = false;
   function homeArm(){
     clearTimeout(homeT);
     if(active && tab === "home" && H1 && H2 && H1.date === H1.today && !document.hidden)
@@ -2332,11 +2333,15 @@ var Teacher = (function(){
         if(el) el.innerHTML = missingHtml();
         /* 別端末が今日の品目を変えていたら品目欄も静かに描き直す。
            古い品目のまま「決定」を押すと向こうの変更を消してしまう。
-           名前欄にフォーカスがある（=書いている途中）は今回は見送って次の tick に回す */
-        if(itemsChanged){
+           名前欄にフォーカスがある（=書いている途中）は今回は見送り、
+           paneStale に覚えてフォーカスが外れた後の tick で改めて試す */
+        if(itemsChanged || paneStale){
           var pane = $('[data-pane="today"]', root), ae = document.activeElement;
-          if(pane && !(ae && ae.tagName === "INPUT" && pane.contains(ae)))
+          var editing = ae && ae.tagName === "INPUT" && pane && pane.contains(ae);
+          if(pane && !editing){
             pane.outerHTML = dayPane(H1, "today", pane.getAttribute("data-label") || "今日");
+            paneStale = false;
+          }else if(pane) paneStale = true;
         }
       }
     }).catch(function(){}).then(function(){ homeArm(); });
@@ -2517,30 +2522,36 @@ var Teacher = (function(){
       .map(function(b){ return Number(b.getAttribute("data-abs")); });
     tcall("apiSetAbsent", D.date, nos).then(function(r){ D = r; ST = null; show(); toast("欠席を保存しました"); });
   }
-  var seq = 0, ackSeq = 0;
+  var seq = 0, tapBusy = false, tapPending = [];
   function tapCell(k){
     var p = k.split(":"), c = D.cells[k] || {};
     var next = Domain.nextState(c.state || "");
     var ev = {id:"t-" + Date.now().toString(36) + "-" + (++seq), date:D.date, no:Number(p[0]), slot:Number(p[1]),
               op: next || "off", at:Date.now(), via:"teacher"};
-    var mine = seq;
     D.cells[k] = {state:next, via:"teacher", at:"", exempt:false};
     show();
     /* apiMark が直した日の表（day）を返すので、ここでは再取得しない（1往復で済む）。
-       応答は新しいものほど後の状態を全部含む。遅れて届いた古い応答は捨てる
-       （連続タップで逆順に届くと、古い表が新しい表を上書きする） */
-    tcall("apiMark", [ev], Date.now()).then(function(r){
-      if(mine < ackSeq) return;
-      ackSeq = mine;
+       通信は1本ずつ直列に流す: 連続タップを並行して投げると、サーバの処理順や
+       応答の到着順が逆転して、古い表が新しい表を上書きすることがある。
+       タップは溜めてまとめて送る（係側の queue/sync と同じ形） */
+    tapPending.push(ev);
+    if(!tapBusy){ tapBusy = true; sendTaps(); }
+  }
+  function sendTaps(){
+    var list = tapPending; tapPending = [];
+    tcall("apiMark", list, Date.now()).then(function(r){
       ST = null;
       if(r && r.day){
-        D = r.day;
-        if(H1 && D.date === H1.date) H1 = r.day;   /* ホームの未提出も新しい表に */
-        if(tab === "day") show();
+        if(H1 && r.day.date === H1.date) H1 = r.day;   /* ホームの未提出も新しい表に */
+        /* 返ってきた表が見ている日のもののときだけ反映（移動済みなら上書きしない） */
+        if(D.date === r.day.date){ D = r.day; if(tab === "day") show(); }
       }else{
         return tcall("apiTeacherDay", D.date).then(function(r2){ D = r2; if(tab === "day") show(); });
       }
-    }, function(){ loadDay(D.date); });
+    }, function(){ loadDay(D.date); }).then(sendDone, sendDone);
+  }
+  function sendDone(){
+    if(tapPending.length) sendTaps(); else tapBusy = false;
   }
 
   /* ────────── 分析 ────────── */
