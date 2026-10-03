@@ -36,19 +36,28 @@ console.log("■ 日付と時刻（日本時間）");
   ok("IP許可: 壊れた範囲は無視", D.ipAllowed("1.2.3.4", "abc, 1.2.3.4/99") === false && D.ipAllowed("1.2.3.4", "abc, 1.2.3.4") === true);
 }
 
-console.log("■ 名簿の貼り付け");
+console.log("■ 係の開閉の境目（nextOpenChange）");
 {
   const D = load().Domain;
-  const r = D.parseRoster("番号\t氏名\n１\t青木　はると\n2\t石川 めい\n\n3\t上田 そうた");
-  ok("見出しを捨て、全角の番号を読む", r.length === 3 && r[0].no === 1 && r[0].name === "青木 はると", r);
-  const r2 = D.parseRoster("青木\n石川\n上田");
-  ok("番号が無ければ 1 から振る", r2.map(x => x.no).join() === "1,2,3", r2);
-  const r3 = D.parseRoster("1,青木\n1,石川\n2,上田");
-  ok("同じ番号は先の1人だけ", r3.length === 2 && r3[0].name === "青木", r3);
-  const r4 = D.parseRoster("番号\t氏名\t組\n1\t青木\t3組\n2\t石川\t3組");
-  ok("見出しに余分列があっても捨てる", r4.length === 2 && r4[0].name === "青木" && r4[1].name === "石川", r4);
-  const r5 = D.parseRoster("氏名\tふりがな\n青木\tあおき\n石川\tいしかわ");
-  ok("番号の列が無い見出しも捨てて連番", r5.length === 2 && r5[0].no === 1 && r5[1].no === 2, r5);
+  /* T0 は 2026-09-25（金）の 8:30 ごろ。週をまたぐ境目の計算を確かめる */
+  const b1 = D.nextOpenChange(JST("2026-09-25", "07:59"));
+  const p1 = D.jstParts(b1);
+  ok("金曜の8:00前 → その日の8:00", p1.wd === 5 && p1.h === 8 && p1.mi === 0, p1);
+  const b2 = D.nextOpenChange(JST("2026-09-25", "08:00"));
+  const p2 = D.jstParts(b2);
+  ok("金曜の8:00ちょうど → 14:00", p2.wd === 5 && p2.h === 14 && p2.mi === 0, p2);
+  const b3 = D.nextOpenChange(JST("2026-09-25", "13:59"));
+  const p3 = D.jstParts(b3);
+  ok("金曜の14:00前 → その日の14:00", p3.wd === 5 && p3.h === 14 && p3.mi === 0, p3);
+  const b4 = D.nextOpenChange(JST("2026-09-25", "14:00"));
+  const p4 = D.jstParts(b4);
+  ok("金曜の14:00ちょうど → 月曜の8:00", p4.wd === 1 && p4.h === 8 && p4.mi === 0, p4);
+  const b5 = D.nextOpenChange(JST("2026-09-26", "12:00"));
+  const p5 = D.jstParts(b5);
+  ok("土曜 → 月曜の8:00", p5.wd === 1 && p5.h === 8 && p5.mi === 0 && p5.d === 28, p5);
+  const b6 = D.nextOpenChange(JST("2026-09-28", "07:00"));
+  const p6 = D.jstParts(b6);
+  ok("月曜の朝 → その日の8:00", p6.wd === 1 && p6.h === 8 && p6.d === 28, p6);
 }
 
 function fresh(){

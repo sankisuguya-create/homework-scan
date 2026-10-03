@@ -273,12 +273,7 @@ var Teacher = (function(){
 
   /* ────────── 分析 ────────── */
   function pct(x){ return x == null ? "―" : Math.round(x * 100) + "%"; }
-  function meanOf(a){ return a.length ? a.reduce(function(x, y){ return x + y; }, 0) / a.length : null; }
-  function medianOf(a){
-    if(!a.length) return null;
-    var s = a.slice().sort(function(x, y){ return x - y; }), i = Math.floor(s.length / 2);
-    return s.length % 2 ? s[i] : (s[i - 1] + s[i]) / 2;
-  }
+  /* 平均・中央値は Domain.mean / Domain.median（集計の算出と同じ実装） */
   function statsHtml(){
     var list = ST.students.slice();
     if(sortBy === "rate") list.sort(function(a, b){ return (a.rate == null ? 2 : a.rate) - (b.rate == null ? 2 : b.rate) || a.no - b.no; });
@@ -306,9 +301,9 @@ var Teacher = (function(){
       tot.rest += s.rest; tot.forgot += s.forgot; tot.doing += s.doing; });
     var topForgot = ST.students.reduce(function(m, s){ return s.forgot > (m ? m.forgot : -1) ? s : m; }, null);
     h += '<div class="sec"><h2>' + icon("chart") + esc(ST.item || '全品目（合算）') + 'のまとめ</h2><div class="line" style="flex-wrap:wrap">'
-      + '<span class="pick" style="cursor:default"><b>提出率</b>　平均 ' + pct(meanOf(rates)) + '　中央値 ' + pct(medianOf(rates)) + '</span>'
-      + '<span class="pick" style="cursor:default"><b>提出時刻</b>　平均 ' + (meanOf(avgs) == null ? "―" : Domain.hhmm(meanOf(avgs)))
-      + '　中央値 ' + (medianOf(meds) == null ? "―" : Domain.hhmm(medianOf(meds))) + '</span>'
+      + '<span class="pick" style="cursor:default"><b>提出率</b>　平均 ' + pct(Domain.mean(rates)) + '　中央値 ' + pct(Domain.median(rates)) + '</span>'
+      + '<span class="pick" style="cursor:default"><b>提出時刻</b>　平均 ' + (Domain.mean(avgs) == null ? "―" : Domain.hhmm(Domain.mean(avgs)))
+      + '　中央値 ' + (Domain.median(meds) == null ? "―" : Domain.hhmm(Domain.median(meds))) + '</span>'
       + '<span class="pick" style="cursor:default"><b>忘れた回数</b>　合計 ' + tot.forgot + '　1人平均 '
       + (ST.students.length ? (tot.forgot / ST.students.length).toFixed(1) : "0")
       + (topForgot && topForgot.forgot ? '　最大 ' + topForgot.forgot + '（' + topForgot.no + '番）' : '') + '</span>'

@@ -41,26 +41,12 @@ var Helper = (function(){
   /* 開いているか＝係の役でなければ常に開放。係なら端末の時計（日本時間）で判断 */
   function openNow(){ return !!opts.staff || Domain.openAt(Date.now()); }
   function closedNow(){ return !openNow() || closedServer; }
-  /* 次に開閉が切りかわる時刻（端末の時計の ms で返す） */
-  function nextBoundary(){
-    var now = Date.now();
-    var p = Domain.jstParts(now);
-    var today0 = now - (p.h * 3600 + p.mi * 60 + p.s) * 1000;
-    var m = p.h * 60 + p.mi + p.s / 60;
-    if(p.wd !== 0 && p.wd !== 6){
-      if(m < Domain.OPEN.from) return today0 + Domain.OPEN.from * 60000;   /* けさの 8:00 */
-      if(m < Domain.OPEN.to)   return today0 + Domain.OPEN.to * 60000;     /* きょうの 14:00 */
-    }
-    /* あす以降で最初の平日の 8:00 */
-    var t = today0, wd = p.wd;
-    do{ t += 86400000; wd = (wd + 1) % 7; }while(wd === 0 || wd === 6);
-    return t + Domain.OPEN.from * 60000;
-  }
-  /* 境目で閉じる・開ける。14:00 では、たまっている分を先に送ってから閉室中にする */
+  /* 境目で閉じる・開ける。14:00 では、たまっている分を先に送ってから閉室中にする。
+     境目の計算は Domain.nextOpenChange が正本（8:00/14:00/休日の決まりと同じ式） */
   function gate(){
     clearTimeout(gateT);
     if(!active || opts.staff) return;
-    var wait = Math.max(500, nextBoundary() - Date.now());
+    var wait = Math.max(500, Domain.nextOpenChange(Date.now()) - Date.now());
     gateT = setTimeout(function(){
       closedServer = false;
       if(openNow()){ kick(); netCheck(); }
