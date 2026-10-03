@@ -82,16 +82,15 @@ button{cursor:pointer;touch-action:manipulation}
 .pane .head > div{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;min-width:0;font-weight:700;font-size:14px;padding:4px 2px;text-align:center;line-height:1.15;overflow-wrap:anywhere}
 .pane .head .ic{width:1.5em;height:1.5em}
 .pane .head > div:first-child{font-size:12px;white-space:nowrap}
-/* 品目の列の色。アイコンと名前と一緒に出す（色だけで区別しない） */
-.head .t-blue{background:var(--tb);color:var(--ink)}
-.head .t-red{background:var(--tr);color:var(--ink)}
-.head .t-green{background:var(--tg);color:var(--ink)}
-.cell.t-blue,.row.empty .cell.t-blue{background:var(--tb)}
-.cell.t-red,.row.empty .cell.t-red{background:var(--tr)}
-.cell.t-green,.row.empty .cell.t-green{background:var(--tg)}
-.chip.t-blue{background:var(--tb)}
-.chip.t-red{background:var(--tr)}
-.chip.t-green{background:var(--tg)}
+/* 品目の色は小さな面積にだけ載せる（大きな面を薄い色で塗り分けると、
+   まだ何も押していない面と区別がつきにくい）。
+   列の見出しは下の細い帯、集計チップは左の筋。どちらもアイコン＋名前と一緒に出る */
+.head .t-blue{box-shadow:inset 0 -7px 0 var(--tb)}
+.head .t-red{box-shadow:inset 0 -7px 0 var(--tr)}
+.head .t-green{box-shadow:inset 0 -7px 0 var(--tg)}
+.chip.t-blue{box-shadow:inset 6px 0 0 var(--tb)}
+.chip.t-red{box-shadow:inset 6px 0 0 var(--tr)}
+.chip.t-green{box-shadow:inset 6px 0 0 var(--tg)}
 .pick.t-blue{background:var(--tb)}
 .pick.t-red{background:var(--tr)}
 .pick.t-green{background:var(--tg)}
@@ -119,9 +118,6 @@ button{cursor:pointer;touch-action:manipulation}
 .s-rest{background:var(--soft);color:var(--ink)}
 .s-forgot{background:var(--warn);color:var(--ink)}
 .s-doing{background:var(--paper);color:var(--ink);box-shadow:inset 0 0 0 4px var(--ink)}
-.cell.s-doing.t-blue{background:var(--tb)}
-.cell.s-doing.t-red{background:var(--tr)}
-.cell.s-doing.t-green{background:var(--tg)}
 .legend .s-doing{box-shadow:none;border-width:3px}
 .cell.flash{animation:flash .45s}
 @keyframes flash{0%{outline:6px solid var(--ink);outline-offset:-8px}100%{outline:0 solid var(--ink);outline-offset:-8px}}
@@ -208,6 +204,11 @@ textarea{border:var(--thin);border-radius:6px;padding:10px;font-size:18px;width:
 .mat .c .ic{width:26px;height:26px}
 .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--ink);color:var(--paper);padding:14px 26px;border-radius:var(--r);font-size:22px;font-weight:700;z-index:80;display:flex;gap:10px;align-items:center}
 .toast.ng{background:var(--warn);color:var(--ink)}
+/* サーバと画面の版ずれ警告（API_VER / WANT_VER）。見逃せないので上端に張り付ける */
+.verwarn{position:fixed;top:0;left:0;right:0;z-index:99;background:var(--warn);color:var(--ink);
+  display:flex;align-items:center;justify-content:center;gap:12px;padding:12px 20px;
+  font-size:24px;font-weight:800;border-bottom:var(--line);text-align:center}
+.verwarn .ic{width:32px;height:32px;flex:none}
 .empty-msg{border:3px dashed var(--ink);border-radius:var(--r);padding:20px;font-size:22px;font-weight:700}
 
 /* ================= 最初の画面（係） ================= */

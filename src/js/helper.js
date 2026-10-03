@@ -12,13 +12,15 @@
      「校内のIP」がせっていに入っていると、校外のネットワークでは開けない
      （端末が自分の外IPを調べて、校内のIPと合うか見る。先生には関門なし）
 ================================================================== */
-var MARK = {
-  on:     {ch:"○", label:"出した"},
-  rest:   {ch:"休", label:"休み"},
-  forgot: {ch:"忘", label:"わすれた"},
-  doing:  {ch:"△", label:"やっている"},
-  "":     {ch:"",  label:"まだ"}
-};
+/* マスの状態の字と呼び名は Domain.MARKS が正本。
+   「まだ」（空白）は画面だけの表示なのでここで足す */
+var MARK = (function(){
+  var m = {"":{ch:"", label:"まだ"}};
+  ["on", "rest", "forgot", "doing"].forEach(function(k){
+    m[k] = {ch:Domain.MARKS[k].glyph, label:Domain.MARKS[k].label};
+  });
+  return m;
+})();
 /* ○ と △ は字だと線が細いので、太い線の図形で描く */
 var MARK_SVG = {
   on:    '<svg class="gm" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.6" fill="none" stroke="currentColor" stroke-width="3.4"/></svg>',
@@ -39,26 +41,12 @@ var Helper = (function(){
   /* 開いているか＝係の役でなければ常に開放。係なら端末の時計（日本時間）で判断 */
   function openNow(){ return !!opts.staff || Domain.openAt(Date.now()); }
   function closedNow(){ return !openNow() || closedServer; }
-  /* 次に開閉が切りかわる時刻（端末の時計の ms で返す） */
-  function nextBoundary(){
-    var now = Date.now();
-    var p = Domain.jstParts(now);
-    var today0 = now - (p.h * 3600 + p.mi * 60 + p.s) * 1000;
-    var m = p.h * 60 + p.mi + p.s / 60;
-    if(p.wd !== 0 && p.wd !== 6){
-      if(m < Domain.OPEN.from) return today0 + Domain.OPEN.from * 60000;   /* けさの 8:00 */
-      if(m < Domain.OPEN.to)   return today0 + Domain.OPEN.to * 60000;     /* きょうの 14:00 */
-    }
-    /* あす以降で最初の平日の 8:00 */
-    var t = today0, wd = p.wd;
-    do{ t += 86400000; wd = (wd + 1) % 7; }while(wd === 0 || wd === 6);
-    return t + Domain.OPEN.from * 60000;
-  }
-  /* 境目で閉じる・開ける。14:00 では、たまっている分を先に送ってから閉室中にする */
+  /* 境目で閉じる・開ける。14:00 では、たまっている分を先に送ってから閉室中にする。
+     境目の計算は Domain.nextOpenChange が正本（8:00/14:00/休日の決まりと同じ式） */
   function gate(){
     clearTimeout(gateT);
     if(!active || opts.staff) return;
-    var wait = Math.max(500, nextBoundary() - Date.now());
+    var wait = Math.max(500, Domain.nextOpenChange(Date.now()) - Date.now());
     gateT = setTimeout(function(){
       closedServer = false;
       if(openNow()){ kick(); netCheck(); }
@@ -133,7 +121,9 @@ var Helper = (function(){
   }
   function schedule(){
     clearTimeout(timer);
-    if(!active || closedNow() || netBlocked()) return;   /* 閉室中・校外はサーバを呼ばない */
+    /* 閉室中・校外・画面が見えていない間はサーバを呼ばない。
+       見えている画面に戻ったとき visibilitychange → kick で再開する（貯めた分もそこで送る） */
+    if(!active || closedNow() || netBlocked() || document.hidden) return;
     timer = setTimeout(function(){ sync().then(schedule, schedule); }, backoff || (queue.length ? 1500 : 15000));
   }
   function kick(){ sync().then(schedule, schedule); }
@@ -208,11 +198,9 @@ var Helper = (function(){
   function cellInner(state){
     return '<span class="g" aria-hidden="true">' + markGlyph(state) + '</span>';
   }
-  /* 品目の列の色。空白と △ のマスは列色のまま、○・休・忘 は状態の色を優先する */
-  function tintCls(it, s){ return it.color && (s === "" || s === "doing") ? " t-" + it.color : ""; }
   function cellHtml(no, it, state, excused){
     var s = excused ? "on" : (state || "");
-    return '<button class="cell s-' + (s || "none") + tintCls(it, s) + '" data-k="' + no + ':' + it.slot + '" '
+    return '<button class="cell s-' + (s || "none") + '" data-k="' + no + ':' + it.slot + '" '
          + 'aria-label="' + no + 'ばん ' + esc(it.name) + ' ' + MARK[s].label + '">' + cellInner(s) + '</button>';
   }
   function paintCell(k, state){
@@ -220,7 +208,7 @@ var Helper = (function(){
     if(!c) return render();
     var p = k.split(":"), it = itemOf(Number(p[1]));
     var s = state || "";
-    c.className = "cell s-" + (s || "none") + tintCls(it, s);
+    c.className = "cell s-" + (s || "none");
     c.setAttribute("aria-label", p[0] + "ばん " + it.name + " " + MARK[s].label);
     c.innerHTML = cellInner(s);
     flash(c);
@@ -250,6 +238,27 @@ var Helper = (function(){
   }
   function paintSummary(){ var s = root && root.querySelector(".sum"); if(s) s.innerHTML = summaryHtml(); }
 
+  /* 表示する名前＝苗字。同じ苗字がいる子は「苗字＋名前の一文字目」にする */
+  function dispMap(){
+    var seen = {}, disp = {};
+    S.roster.forEach(function(r){
+      var sn = String(r.name || "").trim().split(/[\s　]+/)[0] || "";
+      if(sn) seen[sn] = (seen[sn] || 0) + 1;
+    });
+    S.roster.forEach(function(r){
+      var p = String(r.name || "").trim().split(/[\s　]+/);
+      var sn = p[0] || "", g = p[1] || "";
+      disp[r.no] = sn && seen[sn] > 1 && g ? sn + Array.from(g)[0] : sn;
+    });
+    return disp;
+  }
+
+  function netHtml(){
+    return online
+      ? '<div class="net" title="保存できています">' + icon("cloud") + '<span class="sr">保存できています</span></div>'
+      : '<div class="net off" role="status">' + icon("cloudOff") + 'つながっていません（しるしは この PC に のこっています）</div>';
+  }
+
   function paneHtml(list, rows, cols, cells, named, abs, disp){
     var h = '<div class="pane" style="--cols:' + cols + ';--rows:' + (rows + 1) + ';grid-template-rows:48px repeat(' + rows + ',minmax(0,1fr))">';
     h += '<div class="row head"><div>番号</div><div>' + (named ? '名前' : '') + '</div>'
@@ -259,7 +268,7 @@ var Helper = (function(){
       var st = list[i];
       if(!st){
         h += '<div class="row empty"><div class="who"></div><div class="who"></div>'
-           + S.items.map(function(it){ return '<div class="cell' + (it.color ? " t-" + it.color : "") + '"></div>'; }).join("") + '</div>';
+           + S.items.map(function(it){ return '<div class="cell"></div>'; }).join("") + '</div>';
         continue;
       }
       var ab = !!abs[st.no], lab = st.no + 'ばん 休みの切り替え';
@@ -297,18 +306,86 @@ var Helper = (function(){
       + '<p class="msg">' + msg + '</p>'
       + '<p class="sub">つかえるのは 平日 8:00〜14:00</p></div></div>';
   }
+  /* ── 差分描画 ─────────────────────────────────
+     15秒ごとの状態確認では表の構造（日・品目・名簿・免除）がほぼ変わらない。
+     構造の印（fp）が同じなら DOM を建て直さず、変わったマス・休み行・
+     集計・接続表示だけを書き直す（字の大きさの自動調整 fitWho も走らせない）。 */
+  var last = null;   /* {fp, cells, abs, sum, net}：いま画面に出ている状態 */
+  function fingerprint(){
+    return S.date + "|" + (opts.staff ? "t" : "h")
+      + "|" + S.items.map(function(i){ return i.slot + "," + i.name + "," + i.icon + "," + (i.color || ""); }).join(";")
+      + "|" + S.roster.map(function(r){ return r.no + "," + (r.name || ""); }).join(";")
+      + "|" + Object.keys(S.excused || {}).sort().join(";");
+  }
+  /* 描いた時点の状態を覚える */
+  function rememberLast(fp, cells, abs){
+    var m = {}, a = {};
+    S.roster.forEach(function(st){
+      a[st.no] = !!abs[st.no];
+      S.items.forEach(function(it){
+        var k = st.no + ":" + it.slot;
+        m[k] = a[st.no] ? "rest" : (S.excused[k] ? "on" : (cells[k] || ""));
+      });
+    });
+    last = {fp:fp, cells:m, abs:a, sum:summaryHtml(), net:online};
+  }
+  function diffApply(cells, abs){
+    var disp = dispMap(), absDirty = false;
+    S.roster.forEach(function(st){
+      var no = st.no, ab = !!abs[no];
+      if(last.abs[no] !== ab){
+        last.abs[no] = ab; absDirty = true;
+        var wno = root.querySelector('.who.wno[data-abs="' + no + '"]');
+        var wnm = root.querySelector('.who.wnm[data-abs="' + no + '"]');
+        if(wno && wnm){
+          wno.parentElement.classList.toggle("abs", ab);
+          var lab = no + "ばん 休みの切り替え";
+          wno.setAttribute("aria-pressed", String(ab));
+          wnm.setAttribute("aria-pressed", String(ab));
+          wno.setAttribute("aria-label", lab);
+          wnm.setAttribute("aria-label", lab);
+          wnm.innerHTML = (disp[no] ? '<span class="nm">' + esc(disp[no]) + '</span>' : '')
+                        + (ab ? '<span class="ab">休</span>' : '');
+        }
+      }
+      S.items.forEach(function(it){
+        var k = no + ":" + it.slot;
+        var want = ab ? "rest" : (S.excused[k] ? "on" : (cells[k] || ""));
+        if(last.cells[k] !== want){
+          last.cells[k] = want;
+          var c = root.querySelector('.cell[data-k="' + k + '"]');
+          if(c){
+            c.className = "cell s-" + (want || "none");
+            c.setAttribute("aria-label", no + "ばん " + it.name + " " + MARK[want].label);
+            c.innerHTML = cellInner(want);
+          }
+        }
+      });
+    });
+    var sum = summaryHtml();
+    if(sum !== last.sum){
+      last.sum = sum;
+      var el = root.querySelector(".sum"); if(el) el.innerHTML = sum;
+    }
+    if(online !== last.net){
+      last.net = online;
+      var nel = root.querySelector(".net"); if(nel) nel.outerHTML = netHtml();
+    }
+    if(absDirty) fitWho();
+  }
+
   function render(){
     if(!root || !active) return;
-    if(closedNow()){ root.innerHTML = closedHtml(); return; }
-    if(netBlocked()){ root.innerHTML = offnetHtml(); return; }
-    if(!S){ root.innerHTML = '<div class="helper"><div class="none">' + icon("sync") + 'よみこみ中…</div></div>'; return; }
-    var cells = view();
-    var net = online
-      ? '<div class="net" title="保存できています">' + icon("cloud") + '<span class="sr">保存できています</span></div>'
-      : '<div class="net off" role="status">' + icon("cloudOff") + 'つながっていません（しるしは この PC に のこっています）</div>';
+    if(closedNow()){ root.innerHTML = closedHtml(); last = null; return; }
+    if(netBlocked()){ root.innerHTML = offnetHtml(); last = null; return; }
+    if(!S){ root.innerHTML = '<div class="helper"><div class="none">' + icon("sync") + 'よみこみ中…</div></div>'; last = null; return; }
+    var cells = view(), abs = absView();
+    var fp = fingerprint();
+    if(last && last.fp === fp){ diffApply(cells, abs); return; }
+
     var head = '<div class="hbar"><div class="date">' + esc(dateLabel(S.date, S.wd)) + '</div>'
       + '<div class="title">' + icon("check") + 'しゅくだい チェック</div><div class="grow"></div>'
-      + (S.roster.length && S.items.length ? legend() : '') + net
+      + (S.roster.length && S.items.length ? legend() : '') + netHtml()
       + (opts.staff ? '<button class="btn tbtn" data-act="teacher">' + icon("gear") + '先生の画面</button>' : '') + '</div>';
 
     var body;
@@ -320,20 +397,13 @@ var Helper = (function(){
       var roster = S.roster.slice().sort(function(a, b){ return a.no - b.no; });
       var panes = [];
       var named = S.roster.some(function(r){ return r.name; });
-      var abs = absView();
-      /* 表示する名前＝苗字。同じ苗字がいる子は「苗字＋名前の一文字目」にする */
-      var seen = {}, disp = {};
-      roster.forEach(function(r){
-        var sn = String(r.name || "").trim().split(/[\s　]+/)[0] || "";
-        if(sn) seen[sn] = (seen[sn] || 0) + 1;
-      });
-      roster.forEach(function(r){
-        var p = String(r.name || "").trim().split(/[\s　]+/);
-        var sn = p[0] || "", g = p[1] || "";
-        disp[r.no] = sn && seen[sn] > 1 && g ? sn + Array.from(g)[0] : sn;
-      });
-      /* 元の名前列（1.8fr）の幅を半分にし、空いた幅を提出物へ配分する。
-         名前列はさらに「番号（左寄せ・2桁分の固定幅）＋名前（中央）」の2列に分ける（合計の幅は変えない） */
+      var disp = dispMap();
+      /* 名前列の決まり（確定済み。変えない）:
+         ・児童を ⌈人数÷3⌉ 行の3列に均等に分ける（rows×3列 ≥ 児童数）
+         ・行は「番号＋名前」の2セル（境目の線なし）。番号・名前どちらを押しても休み切替
+         ・名前は苗字のみ（同姓は苗字＋名前の頭文字）。fitWho が列ごとに字の大きさを合わせる
+         デモ版の #selfcheck が3列・行容量・集計チップを機械で確かめる（src/js/selfcheck.js）
+         元の名前列（1.8fr）の幅を半分にし、空いた幅を提出物へ配分する */
       var nameFr = .9 * S.items.length / (S.items.length + .9);
       var cols = "22px minmax(36px," + nameFr + "fr) repeat(" + S.items.length + ",minmax(0,1fr))";
       var rows = Math.ceil(roster.length / 3);
@@ -345,6 +415,7 @@ var Helper = (function(){
     }
     root.innerHTML = '<div class="helper">' + head + body + '</div>';
     fitWho();
+    rememberLast(fp, cells, abs);
   }
 
   /* 番号と名前のセルの字を、枠からはみ出さない一番大きな字にする。
@@ -384,7 +455,7 @@ var Helper = (function(){
       + '<p class="sub">つかえるのは 校内（edu-net）からだけ</p></div></div>';
   }
 
-  function mount(el, o){ root = el; opts = o || {}; active = true; closedServer = false; netOk = null; render(); kick(); gate(); netCheck(); }
+  function mount(el, o){ root = el; opts = o || {}; active = true; closedServer = false; netOk = null; last = null; render(); kick(); gate(); netCheck(); }
   function unmount(){ active = false; clearTimeout(timer); clearTimeout(gateT); clearTimeout(netT); }
 
   document.addEventListener("click", function(e){

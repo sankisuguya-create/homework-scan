@@ -4,7 +4,7 @@
    シートも Apps Script の API も触らない。だから同じファイルを
      ・Apps Script（Api.gs から呼ぶ）
      ・デモ版（dist/demo.html に差し込む）
-     ・手元の検査（node tests/domain.test.js）
+     ・手元の検査（node tests/server.test.js）
    の3か所で使う。決まりを変えるときはここだけを直す。
 
    ■ 日付と時刻
@@ -27,6 +27,62 @@ var Domain = (function(){
   function isState(s){ return STATES.indexOf(s) >= 0; }
   function nextState(s){ return NEXT[s || ""] == null ? "on" : NEXT[s || ""]; }
   function counts(s){ return !!COUNTS[s]; }
+
+  /* ── 語彙の正本 ─────────────────────────────
+     記録のセルの字・マスの状態の呼び名・品目のアイコンと色・表の列構成は、
+     サーバと両画面が共有する決まりなのでここにだけ置く。画面側の表記は
+     ここから派生させる（片方だけ直してずれる、を防ぐ） */
+  var MARKS = {   /* マスの状態：「記録」の字 / 操作の名まえ / 画面の呼び名 */
+    on:     {glyph:"○", op:"提出",       label:"出した"},
+    rest:   {glyph:"休", op:"休み",       label:"休み"},
+    forgot: {glyph:"忘", op:"忘れた",     label:"わすれた"},
+    doing:  {glyph:"△", op:"やっている", label:"やっている"},
+    /* 「消」は空白に戻した印（欠席の「休」より強い）。集計では空白にたたまれる
+       ので画面に出ることはない —— サーバ側だけが使う */
+    off:    {glyph:"消", op:"空白",       label:"空白"}
+  };
+  /* MARKS から派生する表（直すのは MARKS だけでよい） */
+  var GLYPH = {}, GLYPH_R = {}, OP = {};
+  Object.keys(MARKS).forEach(function(k){
+    GLYPH[k] = MARKS[k].glyph;
+    GLYPH_R[MARKS[k].glyph] = k;
+    OP[k] = MARKS[k].op;
+  });
+
+  var ITEM_ICONS = ["book", "calc", "note", "pencil", "paper", "star", "music", "bag", "abc"];
+  var ICON_LABEL = {book:"本", calc:"計算", note:"連絡帳", pencil:"鉛筆", paper:"プリント",
+                    star:"星", music:"音楽", bag:"かばん", abc:"英語"};
+  var ITEM_COLORS = ["blue", "red", "green"];   /* 品目の色。係の画面の細い帯の t-… に対応 */
+  var COLOR_LABEL = {blue:"薄い青", red:"薄い赤", green:"薄い緑"};
+
+  /* 表の列構成。名簿は算数タイムアタックと同じ並び（先生がシートに直接貼る） */
+  var SCHEMA = {
+    "名簿":     ["メールアドレス", "学年", "組", "番号", "氏名"],
+    "品目":     ["枠", "名前", "アイコン", "いつも出す", "色"],
+    "日の品目": ["日付", "枠", "名前"],
+    "記録":     (function(){ var h = ["日付", "番号"]; for(var i = 1; i <= SLOTS; i++) h.push("枠" + i); return h; })(),
+    "欠席":     ["日付", "番号"],
+    "免除":     ["開始日", "終了日", "番号", "枠", "メモ"],
+    "操作記録": ["時刻", "種類", "内容", "利用者"],
+    "設定":     ["項目", "値"],
+    "係":       ["メールアドレス", "いつまで", "メモ"]
+  };
+  var DEFAULT_ROWS = {
+    "品目": [
+      ["1", "漢字ドリル", "book",   "○", "red"],
+      ["2", "計算ドリル", "calc",   "○", "blue"],
+      ["3", "連絡帳",     "note",   "○", "green"],
+      ["4", "", "pencil", "", ""], ["5", "", "paper", "", ""], ["6", "", "star",  "", ""],
+      ["7", "", "music",  "", ""], ["8", "", "bag",   "", ""], ["9", "", "abc",   "", ""]
+    ],
+    "設定": [
+      ["提出率の目安（%）", "80"],
+      ["続けて出ていない日の目安", "3"],
+      ["係の画面に氏名を出す", "出す"],
+      ["集計の開始日", ""],
+      ["校内のIP", ""]
+    ]
+  };
 
   function pad(n){ return (n < 10 ? "0" : "") + n; }
 
@@ -96,6 +152,22 @@ var Domain = (function(){
     if(p.wd === 0 || p.wd === 6) return false;
     var m = p.h * 60 + p.mi;
     return m >= OPEN.from && m < OPEN.to + (graceMin || 0);
+  }
+  /* 次に開閉が切りかわる時刻（ms）。係の画面が境目に予約を掛けるために使う。
+     窓の境界（8:00/14:00/休日）はここだけの決まりなので、同じ計算を画面側に
+     写させないように本体を置く */
+  function nextOpenChange(now){
+    var p = jstParts(now);
+    var today0 = now - (p.h * 3600 + p.mi * 60 + p.s) * 1000;
+    var m = p.h * 60 + p.mi + p.s / 60;
+    if(p.wd !== 0 && p.wd !== 6){
+      if(m < OPEN.from) return today0 + OPEN.from * 60000;   /* けさの 8:00 */
+      if(m < OPEN.to)   return today0 + OPEN.to * 60000;     /* きょうの 14:00 */
+    }
+    /* あす以降で最初の平日の 8:00 */
+    var t = today0, wd = p.wd;
+    do{ t += 86400000; wd = (wd + 1) % 7; }while(wd === 0 || wd === 6);
+    return t + OPEN.from * 60000;
   }
 
   /* IPv4 を数値に。読めなければ null（IPv6 はあつかわない） */
@@ -352,43 +424,8 @@ var Domain = (function(){
             rateMin:rateMin, streakMin:streakMin, classAgg:classAgg, itemClass:itemClass};
   }
 
-  /* ── 名簿の貼り付け ───────────────────────
-     スプレッドシートから範囲をコピーした文字（タブ区切り）を読む。
-     1行ごとに「数字だけのマス＝番号」「最初の数字でないマス＝氏名」。
-     番号が無い行ばかりなら、上から 1, 2, 3… を振る。
-     氏名が無い行（見出し・空行）は捨てる。 */
-  var HEAD = /^(番号|出席番号|氏名|名前|なまえ|児童名|No\.?)$/i;
-  function parseRoster(text){
-    var rows = [];
-    String(text || "").split(/\r?\n/).forEach(function(line){
-      if(!line.trim()) return;
-      var cells = line.split(line.indexOf("\t") >= 0 ? "\t" : ",").map(function(c){
-        c = c.trim(); return c.normalize ? c.normalize("NFKC") : c;
-      });
-      var no = null, name = "", hasHead = false;
-      cells.forEach(function(c){
-        if(!c) return;
-        var n = toInt(c);
-        if(n != null){ if(no == null) no = n; }
-        else if(HEAD.test(c)) hasHead = true;
-        else if(!name) name = c.replace(/\s+/g, " ");
-      });
-      /* 見出しの字を含むのに番号の無い行は見出し行（「番号 氏名 組」など）と見て捨てる */
-      if(no == null && hasHead) return;
-      if(name) rows.push({no:no, name:name});
-    });
-    var numbered = rows.filter(function(r){ return r.no != null && r.no > 0; }).length;
-    if(numbered < rows.length){
-      rows.forEach(function(r, i){ r.no = i + 1; });
-    }
-    var seen = {}, out = [];
-    rows.forEach(function(r){
-      if(r.no < 1 || r.no > 99 || seen[r.no]) return;
-      seen[r.no] = true; out.push(r);
-    });
-    out.sort(function(a, b){ return a.no - b.no; });
-    return out;
-  }
+  /* （名簿の貼り付け読み込みは、名簿の正本がスプレッドシートの「名簿」シートに
+     確定したので消えた。先生がシートに直接貼るので、サイト内の貼り付けUIは無い） */
 
   return {
     SLOTS:SLOTS, STATES:STATES, isState:isState, nextState:nextState, counts:counts,
@@ -396,8 +433,13 @@ var Domain = (function(){
     stampMinutes:stampMinutes, hhmm:hhmm, isDate:isDate, asDate:asDate, asStamp:asStamp,
     addDays:addDays, weekday:weekday, toInt:toInt, termEnd:termEnd,
     nextSchoolDay:nextSchoolDay, schoolDay:schoolDay,
-    OPEN:OPEN, openAt:openAt, ip4num:ip4num, ipAllowed:ipAllowed,
+    OPEN:OPEN, openAt:openAt, nextOpenChange:nextOpenChange,
+    ip4num:ip4num, ipAllowed:ipAllowed, mean:mean, median:median,
     isExempt:isExempt, finalMarks:finalMarks, dayView:dayView, dayDetail:dayDetail,
-    stats:stats, parseRoster:parseRoster
+    stats:stats,
+    MARKS:MARKS, GLYPH:GLYPH, GLYPH_R:GLYPH_R, OP:OP,
+    ITEM_ICONS:ITEM_ICONS, ICON_LABEL:ICON_LABEL,
+    ITEM_COLORS:ITEM_COLORS, COLOR_LABEL:COLOR_LABEL,
+    SCHEMA:SCHEMA, DEFAULT_ROWS:DEFAULT_ROWS
   };
 })();

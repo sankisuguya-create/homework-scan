@@ -57,7 +57,7 @@ function demoSeed(){
   P.append("記録", recs);
   P.append("欠席", abs);
   P.append("免除", [[days[0], "", 15, 2, "計算ドリルは別の課題"]]);
-  P.replace("設定", DEFAULT_ROWS["設定"].map(function(r){ return r.slice(); }).map(function(r){
+  P.replace("設定", Domain.DEFAULT_ROWS["設定"].map(function(r){ return r.slice(); }).map(function(r){
     if(r[0] === "集計の開始日") r[1] = days[0];
     return r;
   }));

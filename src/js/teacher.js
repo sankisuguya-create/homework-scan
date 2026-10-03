@@ -31,6 +31,11 @@ var Teacher = (function(){
 
   function back(){ if(opts.back) opts.back(); }
 
+  /* 先生の画面の決まり（確定済み。変えない）:
+     ・768p級の画面では「今日と明日」がスクロール不要の一画面（文書高 ≤ innerHeight。
+       デモ版の #selfcheck が src/js/selfcheck.js で機械計測する。
+       表が長いタブは sticky の操作バー越しにスクロールする設計）
+     ・児童の詳細カードは印刷が常用（1人/全員分。帯と表は app.css の print 用） */
   function frame(body){
     var t = TABS.map(function(x){
       return '<button class="tab" role="tab" data-tab="' + x[0] + '" aria-selected="' + (tab === x[0]) + '">'
@@ -46,7 +51,7 @@ var Teacher = (function(){
 
   function show(){
     if(!active) return;
-    if(tab === "home") return (H1 && H2) ? frame(homeHtml()) : loadHome();
+    if(tab === "home"){ if(!(H1 && H2)) return loadHome(); frame(homeHtml()); return homeArm(); }
     if(tab === "day") return D ? frame(dayHtml()) : loadDay(date);
     if(tab === "stats") return ST ? frame(statsHtml()) : loadStats();
     if(tab === "student") return SD ? frame(studentHtml()) : loadStudents();
@@ -54,6 +59,25 @@ var Teacher = (function(){
     if(tab === "exempt") return frame(exemptHtml());
     if(tab === "roster") return frame(rosterHtml());
     if(tab === "settings") return frame(settingsHtml());
+  }
+
+  /* ホームの「今日の未提出」は25秒ごとに静かに取り直す。
+     home タブを開いていて、今日の欄があるときだけ動く（他タブの編集を邪魔しない） */
+  var homeT = null;
+  function homeArm(){
+    clearTimeout(homeT);
+    if(active && tab === "home" && H1 && H2 && H1.date === H1.today && !document.hidden)
+      homeT = setTimeout(homeTick, 25000);
+  }
+  function homeTick(){
+    if(!active || tab !== "home" || !H1 || !H2 || H1.date !== H1.today || document.hidden) return;
+    call("apiTeacherDay", "").then(function(r){
+      if(active && tab === "home"){
+        H1 = r;
+        var el = $("#missing", root);
+        if(el) el.innerHTML = missingHtml();
+      }
+    }).catch(function(){}).then(function(){ homeArm(); });
   }
   function loadDay(d){
     loading();
@@ -93,7 +117,7 @@ var Teacher = (function(){
     var l2 = H2.date === Domain.addDays(H1.today, 1) ? "明日" : "次の登校日";
     return '<div class="twins">' + dayPane(H1, "today", l1) + dayPane(H2, "tomorrow", l2) + '</div>'
       + '<div class="sec"><h2>' + icon("users") + '今日の未提出</h2>'
-      + (H1.date === H1.today ? missingHtml()
+      + (H1.date === H1.today ? '<div id="missing">' + missingHtml() + '</div>'
          : '<div class="empty-msg">今日は休みです（' + esc(dateLabel(H1.today, Domain.weekday(H1.today))) + '）。</div>')
       + '</div>'
       + '<div class="line"><button class="btn" data-t="home-re">' + icon("sync") + '現在の状態に更新</button></div>';
@@ -239,18 +263,22 @@ var Teacher = (function(){
               op: next || "off", at:Date.now(), via:"teacher"};
     D.cells[k] = {state:next, via:"teacher", at:"", exempt:false};
     show();
-    tcall("apiMark", [ev], Date.now()).then(function(){ ST = null; return tcall("apiTeacherDay", D.date); })
-      .then(function(r){ D = r; if(tab === "day") show(); }, function(){ loadDay(D.date); });
+    /* apiMark が直した日の表（day）を返すので、ここでは再取得しない（1往復で済む） */
+    tcall("apiMark", [ev], Date.now()).then(function(r){
+      ST = null;
+      if(r && r.day){
+        D = r.day;
+        if(H1 && D.date === H1.date) H1 = r.day;   /* ホームの未提出も新しい表に */
+        if(tab === "day") show();
+      }else{
+        return tcall("apiTeacherDay", D.date).then(function(r2){ D = r2; if(tab === "day") show(); });
+      }
+    }, function(){ loadDay(D.date); });
   }
 
   /* ────────── 分析 ────────── */
   function pct(x){ return x == null ? "―" : Math.round(x * 100) + "%"; }
-  function meanOf(a){ return a.length ? a.reduce(function(x, y){ return x + y; }, 0) / a.length : null; }
-  function medianOf(a){
-    if(!a.length) return null;
-    var s = a.slice().sort(function(x, y){ return x - y; }), i = Math.floor(s.length / 2);
-    return s.length % 2 ? s[i] : (s[i - 1] + s[i]) / 2;
-  }
+  /* 平均・中央値は Domain.mean / Domain.median（集計の算出と同じ実装） */
   function statsHtml(){
     var list = ST.students.slice();
     if(sortBy === "rate") list.sort(function(a, b){ return (a.rate == null ? 2 : a.rate) - (b.rate == null ? 2 : b.rate) || a.no - b.no; });
@@ -278,9 +306,9 @@ var Teacher = (function(){
       tot.rest += s.rest; tot.forgot += s.forgot; tot.doing += s.doing; });
     var topForgot = ST.students.reduce(function(m, s){ return s.forgot > (m ? m.forgot : -1) ? s : m; }, null);
     h += '<div class="sec"><h2>' + icon("chart") + esc(ST.item || '全品目（合算）') + 'のまとめ</h2><div class="line" style="flex-wrap:wrap">'
-      + '<span class="pick" style="cursor:default"><b>提出率</b>　平均 ' + pct(meanOf(rates)) + '　中央値 ' + pct(medianOf(rates)) + '</span>'
-      + '<span class="pick" style="cursor:default"><b>提出時刻</b>　平均 ' + (meanOf(avgs) == null ? "―" : Domain.hhmm(meanOf(avgs)))
-      + '　中央値 ' + (medianOf(meds) == null ? "―" : Domain.hhmm(medianOf(meds))) + '</span>'
+      + '<span class="pick" style="cursor:default"><b>提出率</b>　平均 ' + pct(Domain.mean(rates)) + '　中央値 ' + pct(Domain.median(rates)) + '</span>'
+      + '<span class="pick" style="cursor:default"><b>提出時刻</b>　平均 ' + (Domain.mean(avgs) == null ? "―" : Domain.hhmm(Domain.mean(avgs)))
+      + '　中央値 ' + (Domain.median(meds) == null ? "―" : Domain.hhmm(Domain.median(meds))) + '</span>'
       + '<span class="pick" style="cursor:default"><b>忘れた回数</b>　合計 ' + tot.forgot + '　1人平均 '
       + (ST.students.length ? (tot.forgot / ST.students.length).toFixed(1) : "0")
       + (topForgot && topForgot.forgot ? '　最大 ' + topForgot.forgot + '（' + topForgot.no + '番）' : '') + '</span>'
@@ -540,7 +568,7 @@ var Teacher = (function(){
       + '<label class="field">集計の開始日<input type="date" id="se-from" value="' + esc(s.from) + '"></label></div></div>';
     h += '<div class="sec"><h2>' + icon("shield") + '係の画面を開けるネットワーク</h2>'
       + '<div class="line"><label class="field">校内の IP<input id="se-net" value="' + esc(s.netIps || "") + '" placeholder="例 203.0.113.5, 203.0.113.0/24" style="width:22em"></label></div>'
-      + '<p class="sub">空欄ならどこからでも開けます。設定すると係の画面はこの IP（edu-net）内からしか開けません。'
+      + '<p class="note">空欄ならどこからでも開けます。設定すると係の画面はこの IP（edu-net）内からしか開けません。'
       + 'カンマで複数指定でき、範囲は /24 などの CIDR 表記に対応します。校内で調べた外向きの IP を入力してください</p></div>';
     h += '<div class="sec"><h2>' + icon("users") + '係の画面の氏名</h2><div class="chips">'
       + '<button class="pick" data-names="1" aria-pressed="' + s.showNames + '">表示する</button>'
@@ -649,7 +677,7 @@ var Teacher = (function(){
                                        netIps:$("#se-net").value.trim()})
         .then(function(r){ SU = r; ST = null; show(); toast("設定を保存しました"); });
     }
-    if(t === "logs") return tcall("apiLogs").then(function(r){ logs = r; show(); });
+    if(t === "logs") return tcall("apiLogs").then(function(r){ logs = r.list; show(); });
   }
   function onChange(e){
     if(!active || !root.contains(e.target)) return;
@@ -661,14 +689,19 @@ var Teacher = (function(){
   }
   document.addEventListener("click", onClick);
   document.addEventListener("change", onChange);
+  /* 画面が見えている間に戻ったら、ホームの未提出をすぐ取り直す */
+  document.addEventListener("visibilitychange", function(){
+    if(active && !document.hidden && tab === "home") homeTick();
+  });
 
   function mount(el, o){
     root = el; opts = o || {}; active = true;
     tab = "home"; D = SU = ST = SD = null; sdNo = null; H1 = H2 = null; logs = null; date = "";
+    clearTimeout(homeT);
     try{ bgTheme = localStorage.getItem("hs-bg") || "grad"; }catch(ignored){ bgTheme = "grad"; }
     show();
   }
-  function unmount(){ active = false; }
+  function unmount(){ active = false; clearTimeout(homeT); }
 
   return {mount:mount, unmount:unmount, back:back};
 })();

@@ -36,19 +36,28 @@ console.log("■ 日付と時刻（日本時間）");
   ok("IP許可: 壊れた範囲は無視", D.ipAllowed("1.2.3.4", "abc, 1.2.3.4/99") === false && D.ipAllowed("1.2.3.4", "abc, 1.2.3.4") === true);
 }
 
-console.log("■ 名簿の貼り付け");
+console.log("■ 係の開閉の境目（nextOpenChange）");
 {
   const D = load().Domain;
-  const r = D.parseRoster("番号\t氏名\n１\t青木　はると\n2\t石川 めい\n\n3\t上田 そうた");
-  ok("見出しを捨て、全角の番号を読む", r.length === 3 && r[0].no === 1 && r[0].name === "青木 はると", r);
-  const r2 = D.parseRoster("青木\n石川\n上田");
-  ok("番号が無ければ 1 から振る", r2.map(x => x.no).join() === "1,2,3", r2);
-  const r3 = D.parseRoster("1,青木\n1,石川\n2,上田");
-  ok("同じ番号は先の1人だけ", r3.length === 2 && r3[0].name === "青木", r3);
-  const r4 = D.parseRoster("番号\t氏名\t組\n1\t青木\t3組\n2\t石川\t3組");
-  ok("見出しに余分列があっても捨てる", r4.length === 2 && r4[0].name === "青木" && r4[1].name === "石川", r4);
-  const r5 = D.parseRoster("氏名\tふりがな\n青木\tあおき\n石川\tいしかわ");
-  ok("番号の列が無い見出しも捨てて連番", r5.length === 2 && r5[0].no === 1 && r5[1].no === 2, r5);
+  /* T0 は 2026-09-25（金）の 8:30 ごろ。週をまたぐ境目の計算を確かめる */
+  const b1 = D.nextOpenChange(JST("2026-09-25", "07:59"));
+  const p1 = D.jstParts(b1);
+  ok("金曜の8:00前 → その日の8:00", p1.wd === 5 && p1.h === 8 && p1.mi === 0, p1);
+  const b2 = D.nextOpenChange(JST("2026-09-25", "08:00"));
+  const p2 = D.jstParts(b2);
+  ok("金曜の8:00ちょうど → 14:00", p2.wd === 5 && p2.h === 14 && p2.mi === 0, p2);
+  const b3 = D.nextOpenChange(JST("2026-09-25", "13:59"));
+  const p3 = D.jstParts(b3);
+  ok("金曜の14:00前 → その日の14:00", p3.wd === 5 && p3.h === 14 && p3.mi === 0, p3);
+  const b4 = D.nextOpenChange(JST("2026-09-25", "14:00"));
+  const p4 = D.jstParts(b4);
+  ok("金曜の14:00ちょうど → 月曜の8:00", p4.wd === 1 && p4.h === 8 && p4.mi === 0, p4);
+  const b5 = D.nextOpenChange(JST("2026-09-26", "12:00"));
+  const p5 = D.jstParts(b5);
+  ok("土曜 → 月曜の8:00", p5.wd === 1 && p5.h === 8 && p5.mi === 0 && p5.d === 28, p5);
+  const b6 = D.nextOpenChange(JST("2026-09-28", "07:00"));
+  const p6 = D.jstParts(b6);
+  ok("月曜の朝 → その日の8:00", p6.wd === 1 && p6.h === 8 && p6.d === 28, p6);
 }
 
 function fresh(){
@@ -144,6 +153,95 @@ console.log("■ 係が名前をタップして休みを切り替える（apiMar
   s.apiMark([{id:"ab-000006", date:st.date, no:19, abs:true, at:JST(st.date, "08:50"), via:"tap"},
              {id:"ab-000007", date:st.date, no:19, abs:true, at:JST(st.date, "08:50"), via:"tap"}]);
   ok("重複して欠席行が増えない", s.P.rows("欠席").filter(x => Number(x[1]) === 19).length === 1, s.P.rows("欠席"));
+}
+
+console.log("■ 版ずれ検知（API_VER）と応答の棚卸し");
+{
+  const s = fresh();
+  ok("apiToday は版番号を返す", s.apiToday().v === s.API_VER, s.apiToday().v);
+  ok("apiMark も版番号を返す", s.apiMark([]).v === s.API_VER);
+  ok("apiTeacherDay も", s.apiTeacherDay("").v === s.API_VER);
+  ok("apiSetup も", s.apiSetup().v === s.API_VER);
+  ok("apiStats も", s.apiStats().v === s.API_VER);
+  const lg = s.apiLogs();
+  ok("apiLogs は {v, list} の形", lg.v === s.API_VER && Array.isArray(lg.list), lg);
+  ok("係の応答に未使用の now は無い", s.apiToday().now === undefined);
+  ok("設定の応答に未使用の url は無い", s.apiSetup().url === undefined);
+}
+
+console.log("■ 呼び出し内メモ（A2）");
+{
+  const a = fresh(), b = fresh();
+  b.P._setMemo(false);
+  /* 同じ下ごしらえで、メモ経路と非経路の api 応答が一致する */
+  const sa = a.apiToday(), sb = b.apiToday();
+  ok("apiToday が一致", JSON.stringify(sa) === JSON.stringify(sb));
+  ok("apiTeacherDay が一致", JSON.stringify(a.apiTeacherDay("")) === JSON.stringify(b.apiTeacherDay("")));
+  ok("apiSetup が一致", JSON.stringify(a.apiSetup()) === JSON.stringify(b.apiSetup()));
+  ok("apiStats が一致", JSON.stringify(a.apiStats()) === JSON.stringify(b.apiStats()));
+  /* 書き込み直後の同じ呼び出しでの再読もメモ同期で正しい */
+  const e = {id:"m-000001", date:sa.date, no:1, slot:1, op:"on", at:JST(sa.date, "08:10"), via:"tap"};
+  a.apiMark([e]); b.apiMark([e]);
+  ok("書き込み後の apiToday.cells が一致",
+    JSON.stringify(a.apiToday().cells) === JSON.stringify(b.apiToday().cells));
+}
+
+console.log("■ 記録の行が日付順でなくても索引で正しい行を書き直す（A1+P2）");
+{
+  const s = fresh();
+  const d0 = s.apiToday().date;
+  const past = s.Domain.addDays(d0, -3);
+  s.apiSaveDay(past, [{slot:1, name:"漢字"}, {slot:2, name:"計算"}]);
+  /* 対象日の行が他の日の行に挟まれた配置（列がずれないかの確かめ） */
+  s.P.append("記録", [
+    [d0,   "1", "○ 8:00", "", "", "", "", "", "", "", ""],
+    [past, "2", "", "", "", "", "", "", "", "", ""],
+    [d0,   "2", "", "", "", "", "", "", "", "", ""],
+    [past, "1", "", "", "", "", "", "", "", "", ""],
+    [d0,   "3", "△", "", "", "", "", "", "", "", ""]
+  ]);
+  /* 先生が過去の日のマスを直す → 添字3の行の枠2だけが変わるはず */
+  const r = s.apiMark([{id:"t-000001", date:past, no:1, slot:2, op:"forgot", at:JST(past, "08:30"), via:"teacher"}]);
+  ok("受理された", r.processed.indexOf("t-000001") >= 0, r);
+  const rows = s.P.rows("記録");
+  ok("過去の日の行（添字3）の枠2が 忘 になる", rows[3][3] === "*忘", rows[3]);
+  ok("他の日の行は変わらない", rows[0][3] === "" && rows[2][3] === "" && rows[4][3] === "", rows);
+  ok("行数が増えない", rows.length === 5, rows.length);
+  /* 索引経由の読み取りできょうの行だけが見える */
+  const st2 = s.apiToday();
+  ok("きょうのセルが読める", st2.cells["1:1"] === "on" && st2.cells["3:1"] === "doing", st2.cells);
+  ok("過去の日の変更はきょうの表に出ない", st2.cells["1:2"] === undefined, st2.cells);
+  ok("先生の画面では過去の変更が見える", s.apiTeacherDay(past).cells["1:2"].state === "forgot",
+     s.apiTeacherDay(past).cells["1:2"]);
+}
+
+console.log("■ 小表のキャッシュ（P1）");
+{
+  const a = fresh(), b = fresh();
+  b.P._setCache(false);
+  ok("キャッシュ経路と非経路で apiToday が一致",
+    JSON.stringify(a.apiToday()) === JSON.stringify(b.apiToday()));
+  ok("apiTeacherDay が一致",
+    JSON.stringify(a.apiTeacherDay("")) === JSON.stringify(b.apiTeacherDay("")));
+  /* 書き込みは P の append/replace/putRows が消すので、保存直後に新しい値が見える */
+  a.apiSaveSettings({ratePct:70, streakMin:5, showNames:false, from:"", netIps:""});
+  ok("設定保存後の apiToday に反映（名前を出さない）",
+    a.apiToday().roster.every(x => x.name === ""), a.apiToday().roster);
+  a.apiSaveDay("2026-09-26", [{slot:1, name:"漢字"}]);
+  ok("品目保存後の apiTeacherDay は新しい品目",
+    a.apiTeacherDay("2026-09-26").items.length === 1);
+}
+
+console.log("■ 先生のマス直しは1往復（apiMark の day 応答）");
+{
+  const s = fresh();
+  const d0 = s.apiToday().date;
+  const past = s.Domain.addDays(d0, -2);
+  s.apiSaveDay(past, [{slot:1, name:"漢字"}, {slot:2, name:"計算"}]);
+  const r = s.apiMark([{id:"t-900001", date:past, no:2, slot:2, op:"forgot", at:JST(past, "08:30"), via:"teacher"}]);
+  ok("apiMark が直した日の表を返す", r.day && r.day.date === past, r.day && r.day.date);
+  ok("直した印が表に入っている", r.day.cells["2:2"].state === "forgot", r.day.cells["2:2"]);
+  ok("apiTeacherDay と同じ内容", JSON.stringify(r.day) === JSON.stringify(s.apiTeacherDay(past)));
 }
 
 console.log("■ 先生が品目・名簿・過去の日を直す");

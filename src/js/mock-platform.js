@@ -8,10 +8,10 @@ var P = (function(){
 
   function fresh(){
     var t = {};
-    Object.keys(TABLES).forEach(function(n){
-      t[n] = (DEFAULT_ROWS[n] || []).map(function(r){ return r.map(String); });
+    Object.keys(Domain.SCHEMA).forEach(function(n){
+      t[n] = (Domain.DEFAULT_ROWS[n] || []).map(function(r){ return r.map(String); });
     });
-    return {tables:t, props:{}, cache:{}};
+    return {tables:t, cache:{}};
   }
   function load(){
     if(hasLS){
@@ -21,54 +21,84 @@ var P = (function(){
   }
   function save(){ if(hasLS){ try{ localStorage.setItem(KEY, JSON.stringify(db)); }catch(e){} } }
   function table(n){
-    if(!TABLES[n]) throw new Error("知らない表: " + n);
+    if(!Domain.SCHEMA[n]) throw new Error("知らない表: " + n);
     if(!db.tables[n]) db.tables[n] = [];
     return db.tables[n];
   }
   function copy(rows){ return rows.map(function(r){ return r.slice(); }); }
   function norm(n, row){
     var out = [];
-    for(var i = 0; i < TABLES[n].length; i++) out.push(row[i] == null ? "" : String(row[i]));
+    for(var i = 0; i < Domain.SCHEMA[n].length; i++) out.push(row[i] == null ? "" : String(row[i]));
     return out;
   }
 
+  /* Platform.gs の呼び出し内メモの鏡。_setMemo(false) で止めて、
+     メモ経路の応答が非経路と一致することを検査できるようにする */
+  var memo = {data:{}}, memoOn = true;
+  function rmemo(n, w){
+    var k = n + "|" + w;
+    if(memoOn && memo.data[k]) return memo.data[k];
+    var r = table(n).map(function(row){ return row.slice(0, w); });
+    if(memoOn) memo.data[k] = r;
+    return r;
+  }
+  /* 書き込み後は db が正本なので、メモ済みの幅ごとの口を db で引き直す */
+  function memoPull(n){
+    if(!memoOn) return;
+    Object.keys(memo.data).forEach(function(k){
+      if(k.indexOf(n + "|") !== 0) return;
+      var w = Number(k.slice(n.length + 1)), arr = memo.data[k], t = table(n);
+      arr.length = 0;
+      for(var i = 0; i < t.length; i++) arr.push(t[i].slice(0, w));
+    });
+  }
+
+  /* Platform.gs の CACHED と同じ表。書き込み時にキャッシュを消す */
+  var CACHED = {"名簿":1, "品目":1, "設定":1, "免除":1, "係":1, "日の品目":1};
+  var cacheOn = true;
+  function dropCache(n){ if(CACHED[n]) delete db.cache["t:" + n]; }
+
   var api = {
-    rows: function(n){ return copy(table(n)); },
+    cachedRows: function(n, reader, raw){
+      if(raw || !cacheOn) return reader();
+      var key = "t:" + n, hit = api.cacheGet(key);
+      if(hit != null){ try{ return JSON.parse(hit); }catch(e){} }
+      var r = reader();
+      api.cachePut(key, JSON.stringify(r), 90);
+      return r;
+    },
+    rows: function(n){ return rmemo(n, Domain.SCHEMA[n].length); },
+    cols: function(n, w){ return rmemo(n, Math.min(w, Domain.SCHEMA[n].length)); },
+    rowsAt: function(n, idx){
+      var t = rmemo(n, Domain.SCHEMA[n].length), out = {};
+      idx.forEach(function(i){ out[i] = t[i] ? t[i].slice() : null; });
+      return out;
+    },
     tail: function(n, c){ var t = table(n); return copy(t.slice(Math.max(0, t.length - c))); },
-    append: function(n, list){ var t = table(n); list.forEach(function(r){ t.push(norm(n, r)); }); save(); },
-    replace: function(n, list){ db.tables[n] = list.map(function(r){ return norm(n, r); }); save(); },
-    put: function(n, i, r){ db.tables[n][i] = norm(n, r); save(); },
-    prop: function(k){ return db.props[k] == null ? null : db.props[k]; },
-    setProp: function(k, v){ db.props[k] = String(v); save(); },
+    append: function(n, list){ var t = table(n); list.forEach(function(r){ t.push(norm(n, r)); }); dropCache(n); save(); memoPull(n); },
+    replace: function(n, list){ db.tables[n] = list.map(function(r){ return norm(n, r); }); dropCache(n); save(); memoPull(n); },
+    putRows: function(n, startIdx, list){
+      for(var i = 0; i < list.length; i++) db.tables[n][startIdx + i] = norm(n, list[i]);
+      dropCache(n); save(); memoPull(n);
+    },
     cacheGet: function(k){
+      if(!cacheOn) return null;
       var c = db.cache[k];
       if(!c) return null;
       if(c.until < api.now()){ delete db.cache[k]; save(); return null; }
       return c.v;
     },
-    cachePut: function(k, v, sec){ db.cache[k] = {v:String(v), until: api.now() + sec * 1000}; save(); },
+    cachePut: function(k, v, sec){ if(!cacheOn) return; db.cache[k] = {v:String(v), until: api.now() + sec * 1000}; save(); },
     cacheDel: function(k){ delete db.cache[k]; save(); },
     lock: function(fn){ return fn(); },
     now: function(){ return Date.now() + offset; },
-    uuid: function(){
-      var s = "";
-      for(var i = 0; i < 32; i++) s += Math.floor(Math.random() * 16).toString(16);
-      return s.slice(0, 8) + "-" + s.slice(8, 12) + "-" + s.slice(12, 16) + "-" + s.slice(16, 20) + "-" + s.slice(20);
-    },
-    hash: function(s){
-      var h1 = 0x811c9dc5, h2 = 0x01000193;
-      for(var i = 0; i < s.length; i++){
-        h1 = Math.imul(h1 ^ s.charCodeAt(i), 16777619) >>> 0;
-        h2 = Math.imul(h2 + s.charCodeAt(i), 2246822519) >>> 0;
-      }
-      return h1.toString(16) + h2.toString(16);
-    },
-    url: function(){ return ""; },
     sheetUrl: function(){ return ""; },
     who: function(){ return Gate.checkAny(); },
 
     /* 検査とデモのための口。本物の Platform.gs には無い */
-    _reset: function(){ db = fresh(); save(); },
+    _reset: function(){ db = fresh(); memo.data = {}; memoOn = true; cacheOn = true; save(); },
+    _setMemo: function(on){ memoOn = !!on; if(!memoOn) memo.data = {}; },
+    _setCache: function(on){ cacheOn = !!on; },
     _setNow: function(ms){ offset = ms - Date.now(); },
     _db: function(){ return db; },
     _empty: function(){ return !db.tables["名簿"] || db.tables["名簿"].length === 0; }
@@ -77,7 +107,6 @@ var P = (function(){
 })();
 
 var Gate = (typeof Gate !== "undefined") ? Gate : {
-  check: function(){ return {ok:true, email:"demo@edu.nishi.or.jp"}; },
   who: function(){ return {role:"staff", email:"demo@edu.nishi.or.jp", code:""}; },
   checkAny: function(){ return {role:"staff", email:"demo@edu.nishi.or.jp", code:""}; },
   norm: function(raw){

@@ -49,13 +49,6 @@ var Gate = (function(){
     catch(err){ return ""; }
   }
 
-  /* サーバ関数の1行目で呼ぶ。staff でなければ例外を投げる。 */
-  function check(){
-    var j = judge(activeEmail());
-    if(!j.ok) throw new Error("先生のアカウントで開いてください。（" + j.why + "）");
-    return j;
-  }
-
   /* 教職員でなければ「係」シートと照合する。いつまでは YYYY-MM-DD 必須で、
      apiSaveHelpers が学期末（3/31・8/31・12/31の直近）を上限に書き込む。
      空・読めない・期限切れはすべて role:none（閉じる側に倒す）。 */
@@ -67,7 +60,9 @@ var Gate = (function(){
     var hit = false;
     try{
       var t = Domain.jstDate(P.now());
-      P.rows("係").forEach(function(r){
+      /* 「係」はキャッシュ可（係の画面の往復が多い）。保存は cacheDel で消えるので、
+         残る遅れはシートを直接いじった場合の最大90秒だけ —— 係の期限切れは許容する */
+      P.cachedRows("係", function(){ return P.rows("係"); }).forEach(function(r){
         var u = Domain.asDate(r[1]);
         if(norm(r[0]) === e && u && t <= u) hit = true;
       });
@@ -94,6 +89,6 @@ var Gate = (function(){
       .setTitle("宿題チェック");
   }
 
-  return {judge:judge, check:check, who:who, checkAny:checkAny, norm:norm,
+  return {judge:judge, who:who, checkAny:checkAny, norm:norm,
           activeEmail:activeEmail, denyPage:denyPage, STAFF_DOMAIN:STAFF_DOMAIN};
 })();

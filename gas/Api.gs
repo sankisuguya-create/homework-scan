@@ -14,43 +14,17 @@
        同じファイルをそのまま動かすため。
 ================================================================== */
 
-var TABLES = {
-  /* 名簿は算数タイムアタックと同じ並び。先生がシートに直接貼り付ける（サイトでは編集しない） */
-  "名簿":     ["メールアドレス", "学年", "組", "番号", "氏名"],
-  "品目":     ["枠", "名前", "アイコン", "いつも出す", "色"],
-  "日の品目": ["日付", "枠", "名前"],
-  "記録":     ["日付", "番号", "枠1", "枠2", "枠3", "枠4", "枠5", "枠6", "枠7", "枠8", "枠9"],
-  "欠席":     ["日付", "番号"],
-  "免除":     ["開始日", "終了日", "番号", "枠", "メモ"],
-  "操作記録": ["時刻", "種類", "内容", "利用者"],
-  "設定":     ["項目", "値"],
-  "係":       ["メールアドレス", "いつまで", "メモ"]
-};
-var ICONS = ["book", "calc", "note", "pencil", "paper", "star", "music", "bag", "abc"];
-var ITEM_COLORS = ["blue", "red", "green"];   /* 品目の列の色。名前は係の画面の t-… に対応 */
-var DEFAULT_ROWS = {
-  "品目": [
-    ["1", "漢字ドリル", "book",   "○", "red"],
-    ["2", "計算ドリル", "calc",   "○", "blue"],
-    ["3", "連絡帳",     "note",   "○", "green"],
-    ["4", "", "pencil", "", ""], ["5", "", "paper", "", ""], ["6", "", "star",  "", ""],
-    ["7", "", "music",  "", ""], ["8", "", "bag",   "", ""], ["9", "", "abc",   "", ""]
-  ],
-  "設定": [
-    ["提出率の目安（%）", "80"],
-    ["続けて出ていない日の目安", "3"],
-    ["係の画面に氏名を出す", "出す"],
-    ["集計の開始日", ""],
-    ["校内のIP", ""]
-  ]
-};
-var OP  = {on:"提出", rest:"休み", forgot:"忘れた", doing:"やっている", off:"空白"};
-var VIA = {tap:"タップ", teacher:"先生"};
-var GLYPH = {on:"○", rest:"休", forgot:"忘", doing:"△", off:"消"};
+/* 表の列構成・マスの字・品目のアイコンと色の決まりは Domain.gs が正本
+   （Domain.SCHEMA / Domain.MARKS / Domain.GLYPH / Domain.OP / Domain.GLYPH_R /
+   Domain.ITEM_ICONS / Domain.ITEM_COLORS / Domain.DEFAULT_ROWS）。
+   トップレベルの var にはしない —— .gs の評価順を運用側が決めるため、
+   Domain の値はすべて関数の中で使う */
 var MARK_GRACE = 10;   /* 14:00 の閉室を過ぎても、少し前に押した分を受ける幅（分） */
 
-function invert(o){ var r = {}; Object.keys(o).forEach(function(k){ r[o[k]] = k; }); return r; }
-var GLYPH_R = invert(GLYPH);
+/* サーバ側の版。画面（src/js/core.js の WANT_VER）と数を揃える。
+   デプロイは Index.html＋.gs の手貼りなので、片方だけ古い組み合わせがあり得る。
+   api の応答と boot に v で載せ、ずれていたら画面側が警告を出す */
+var API_VER = 1;
 
 /* ── 関門 ───────────────────────────────── */
 /* 教職員、または「係」シートの児童（期限内）。どちらでもなければ例外 */
@@ -64,7 +38,10 @@ function teacher(){
 /* ── 表を読む ─────────────────────────────── */
 /* 「名簿」シートが正本。並びは メアド,学年,組,番号,氏名（算数TAと同じ）。
    以前の 番号,氏名（＋任意でメアド）の行も読めるように両方を受ける。 */
-function readRoster(){
+function readRoster(raw){
+  return P.cachedRows("名簿", readRosterRows, raw);
+}
+function readRosterRows(){
   var out = [], seen = {};
   P.rows("名簿").forEach(function(r){
     var no, name, email = "";
@@ -79,22 +56,28 @@ function readRoster(){
   });
   return out.sort(function(a, b){ return a.no - b.no; });
 }
-function readSlots(){
+function readSlots(raw){
+  return P.cachedRows("品目", readSlotsRows, raw);
+}
+function readSlotsRows(){
   var bySlot = {};
   P.rows("品目").forEach(function(r){
     var s = Domain.toInt(r[0]);
     if(s == null || s < 1 || s > Domain.SLOTS) return;
     bySlot[s] = {slot:s, name:String(r[1] || "").trim(),
-                 icon: ICONS.indexOf(String(r[2])) >= 0 ? String(r[2]) : ICONS[s - 1],
+                 icon: Domain.ITEM_ICONS.indexOf(String(r[2])) >= 0 ? String(r[2]) : Domain.ITEM_ICONS[s - 1],
                  daily: String(r[3] || "").trim() !== "",
-                 color: ITEM_COLORS.indexOf(String(r[4])) >= 0 ? String(r[4]) : ""};
+                 color: Domain.ITEM_COLORS.indexOf(String(r[4])) >= 0 ? String(r[4]) : ""};
   });
   var out = [];
   for(var s = 1; s <= Domain.SLOTS; s++)
-    out.push(bySlot[s] || {slot:s, name:"", icon:ICONS[s - 1], daily:false, color:""});
+    out.push(bySlot[s] || {slot:s, name:"", icon:Domain.ITEM_ICONS[s - 1], daily:false, color:""});
   return out;
 }
-function readDays(){
+function readDays(raw){
+  return P.cachedRows("日の品目", readDaysRows, raw);
+}
+function readDaysRows(){
   var days = {};
   P.rows("日の品目").forEach(function(r){
     var d = Domain.asDate(r[0]), s = Domain.toInt(r[1]);
@@ -111,43 +94,73 @@ function readDays(){
    "消" は空白に戻した印（欠席の「休」より強い）。 */ 
 function recCellParse(v){
   var m = /^(\*)?([○休忘△消])(?:\s+(\d{1,2}):(\d{2}))?$/.exec(String(v == null ? "" : v).trim());
-  if(!m || !GLYPH_R[m[2]]) return null;
-  return {op:GLYPH_R[m[2]], via:m[1] ? "teacher" : "tap",
+  if(!m || !Domain.GLYPH_R[m[2]]) return null;
+  return {op:Domain.GLYPH_R[m[2]], via:m[1] ? "teacher" : "tap",
           hm:m[3] == null ? null : Number(m[3]) * 60 + Number(m[4])};
 }
 function recCellText(op, via, atMs){
-  var s = (via === "teacher" ? "*" : "") + GLYPH[op];
+  var s = (via === "teacher" ? "*" : "") + Domain.GLYPH[op];
   if(atMs != null){ var p = Domain.jstParts(atMs); s += " " + p.h + ":" + Domain.pad(p.mi); }
   return s;
 }
-/* 「記録」の行を記録の並び（events）に直す。
+/* 「記録」を読むときは、まず日付・番号の2列だけ読んで対象の行を絞る（P.cols）。
+   from〜to に入る行の添字を集め、その行だけ P.rowsAt で取るので、
+   何年分たまっても1日分の読み込みはその日の行数に比例するだけ。
+   from/to を省くと全行が対象になる（従来どおり）。 */
+function recIndex(from, to){
+  var head = P.cols("記録", 2), out = [];
+  for(var i = 0; i < head.length; i++){
+    var d = Domain.asDate(head[i][0]);
+    if(!d) continue;
+    if((from && d < from) || (to && d > to)) continue;
+    out.push(i);
+  }
+  return out;
+}
+/* 行添字の並びを、{i: 添字, row: 行} の並びにして返す */
+function recEntries(idx){
+  var rows = P.rowsAt("記録", idx), out = [];
+  idx.forEach(function(i){ out.push({i:i, row:rows[i]}); });
+  return out;
+}
+/* {i,row} の並びを記録の並び（events）に直す。
    セル1つが記録1つ（セルは最後の状態を持つので並び替えは要らない）。 */
-function readEvents(){
+function eventsOf(entries){
   var evs = [];
-  P.rows("記録").forEach(function(r, i){
+  entries.forEach(function(en){
+    var r = en.row; if(!r) return;
     var date = Domain.asDate(r[0]), no = Domain.toInt(r[1]);
     if(!date || !no) return;
     for(var s = 1; s <= Domain.SLOTS; s++){
       var c = recCellParse(r[1 + s]);
       if(!c) continue;
-      evs.push({id:"rec-" + i + "-" + s, date:date, no:no, slot:s, op:c.op,
+      evs.push({id:"rec-" + en.i + "-" + s, date:date, no:no, slot:s, op:c.op,
                 at:c.hm == null ? "" : date + " " + Domain.hhmm(c.hm) + ":00",
-                via:c.via, seq:i});
+                via:c.via, seq:en.i});
     }
   });
   return evs;
+}
+function readEvents(from, to){
+  return eventsOf(recEntries(recIndex(from, to)));
 }
 function readAbsences(){
   return P.rows("欠席").map(function(r){ return {date:Domain.asDate(r[0]), no:Domain.toInt(r[1])}; })
     .filter(function(a){ return a.date && a.no; });
 }
-function readExemptions(){
+function readExemptions(raw){
+  return P.cachedRows("免除", readExemptionRows, raw);
+}
+function readExemptionRows(){
   return P.rows("免除").map(function(r){
     return {from:Domain.asDate(r[0]), to:Domain.asDate(r[1]), no:Domain.toInt(r[2]),
             slot:Domain.toInt(r[3]) || 0, memo:String(r[4] || "")};
   }).filter(function(x){ return x.no; });
 }
-function readSettings(){
+function readSettings(raw){
+  return P.cachedRows("設定", readSettingRows, raw);
+}
+function readSettingRows(){
   var kv = {};
   P.rows("設定").forEach(function(r){ kv[String(r[0]).trim()] = String(r[1] == null ? "" : r[1]).trim(); });
   var rate = Number(kv["提出率の目安（%）"]), streak = Number(kv["続けて出ていない日の目安"]);
@@ -171,8 +184,8 @@ function dailyItems(slots){
   return slots.filter(function(s){ return s.daily && s.name; })
               .map(function(s){ return {slot:s.slot, name:s.name}; });
 }
-function itemsFor(date, days, slots){
-  days = days || readDays(); slots = slots || readSlots();
+function itemsFor(date, days, slots, raw){
+  days = days || readDays(raw); slots = slots || readSlots(raw);
   var list = days[date], draft = !list;
   if(draft) list = dailyItems(slots);
   var meta = {};
@@ -200,23 +213,23 @@ function helperState(ctx){
   var days = ctx.days || readDays(), slots = ctx.slots || readSlots();
   var items = itemsFor(date, days, slots).items;
   var roster = ctx.roster || readRoster();
-  var events = ctx.events || readEvents();
+  var events = ctx.events || readEvents(date, date);
   var absences = ctx.absences || readAbsences();
-  var v = Domain.dayView({date:date, items:items, roster:roster, events:events,
-                          absences:absences, exemptions:readExemptions()});
+  var dv = Domain.dayView({date:date, items:items, roster:roster, events:events,
+                          absences:absences, exemptions:ctx.exemptions || readExemptions()});
   var st = ctx.settings || readSettings();
-  return {date:date, wd:Domain.weekday(date), items:items,
+  return {v:API_VER, date:date, wd:Domain.weekday(date), items:items,
           roster: roster.map(function(s){ return {no:s.no, name: st.showNames ? s.name : ""}; }),
-          cells:v.cells, excused:v.excused,
+          cells:dv.cells, excused:dv.excused,
           absent: absences.filter(function(a){ return a.date === date; }).map(function(a){ return a.no; }),
-          now:P.now(), net:st.netIps || ""};
+          net:st.netIps || ""};
 }
 /* 係の画面を使えるのは 8:00〜14:00（日本時間）。閉じている間は closed を返す。
    先生（staff）はいつでも見られる。端末側でも同じ時刻で閉じるので、
    オフラインでも「閉室中」にかわる。 */ 
 function apiToday(){
   var who = guard();
-  if(who.role === "helper" && !Domain.openAt(P.now())) return {closed:true};
+  if(who.role === "helper" && !Domain.openAt(P.now())) return {closed:true, v:API_VER};
   return helperState();
 }
 
@@ -241,19 +254,28 @@ function apiMark(events, sentAt){
     if(e && typeof e === "object" && /^[\w-]{6,40}$/.test(String(e.id || "")))
       processed.push(String(e.id));
   });
-  if(!isTeacher && !Domain.openAt(now, MARK_GRACE)) return {closed:true, processed:processed};
+  if(!isTeacher && !Domain.openAt(now, MARK_GRACE)) return {closed:true, v:API_VER, processed:processed};
   var skew = Number(sentAt);
   skew = isFinite(skew) && sentAt !== null && sentAt !== "" ? now - skew : 0;
   if(Math.abs(skew) > 8 * 86400000) skew = 0;
   var rosterList = readRoster(), roster = {};
   rosterList.forEach(function(s){ roster[s.no] = true; });
   var slots = readSlots(), settings = readSettings();
-  var days = null, absRows = [];
+  var days = null, absRows = [], events = [], markDate = null, dayEvents = null;
   P.lock(function(){
     days = readDays();
-    var recs = P.rows("記録");
-    var recIdx = {};
-    recs.forEach(function(r, i){ recIdx[Domain.asDate(r[0]) + "|" + Domain.toInt(r[1])] = i; });
+    /* 「記録」は日付・番号の2列だけ読んで行番号の地図を作り、
+       係が触れる範囲（きょうとその1週間前まで）の行だけ取る。
+       去年以前の行には二度と触らない */
+    var head = P.cols("記録", 2), recIdx = {}, want = [];
+    var lo = Domain.addDays(date0, -7);
+    for(var hi = 0; hi < head.length; hi++){
+      var hd = Domain.asDate(head[hi][0]);
+      if(!hd) continue;
+      recIdx[hd + "|" + Domain.toInt(head[hi][1])] = hi;
+      if(hd <= date0 && hd >= lo) want.push(hi);
+    }
+    var recs = P.rowsAt("記録", want), nextIdx = head.length;
     var dirty = {}, fresh = [];
     var absDirty = false;
     absRows = P.rows("欠席");
@@ -262,10 +284,11 @@ function apiMark(events, sentAt){
       var id = String(e.id || "");
       if(!/^[\w-]{6,40}$/.test(id)) return;
       var date = Domain.asDate(e.date);
-      if(!date || date > date0 || date < Domain.addDays(date0, -7)) return;
+      if(!date || date > date0 || date < lo) return;
       if(date !== date0 && !isTeacher) return;
       var no = Domain.toInt(e.no), slot = Domain.toInt(e.slot);
       if(!roster[no]) return;
+      if(!markDate) markDate = date;   /* 受理した記録の日（先生への day 応答に使う） */
       /* 休みの切替：{abs:true}=休み、{abs:false}=出席に戻す（児童の名前セルのタップ）
          書き換えるのは「欠席」シートだけ。マスの記録は残るので、戻すと元どおり見える */
       if(e.abs === true || e.abs === false){
@@ -279,16 +302,16 @@ function apiMark(events, sentAt){
       }
       var items = date === date0 ? (days[date] || dailyItems(slots)) : days[date];
       if(!items || !items.some(function(it){ return it.slot === slot; })) return;
-      if(!OP[e.op]) return;
-      var via = VIA[e.via] ? e.via : "tap";
-      if(via === "teacher" && !isTeacher) via = "tap";
+      if(!Domain.OP[e.op]) return;
+      /* 先生の印は教師アカウントだけが立てる（児童側から 'teacher' を名乗られない） */
+      var via = (e.via === "teacher" && isTeacher) ? "teacher" : "tap";
       var at = Number(e.at) + skew;
       if(!isFinite(at) || at > now + 5 * 60000 || at < now - 8 * 86400000) at = now;
       if(date === date0) ensureDay(date, days, slots);
       var key = date + "|" + no, idx = recIdx[key], row, added = false;
       if(idx == null){
         row = [date, String(no), "", "", "", "", "", "", "", "", ""];
-        idx = recs.push(row) - 1; recIdx[key] = idx; fresh.push(row); added = true;
+        idx = nextIdx++; recIdx[key] = idx; recs[idx] = row; fresh.push(idx); added = true;
       }else{
         row = recs[idx];
       }
@@ -298,15 +321,48 @@ function apiMark(events, sentAt){
         if(!added) dirty[idx] = true;
       }
     });
-    Object.keys(dirty).forEach(function(i){ P.put("記録", Number(i), recs[i]); });
-    P.append("記録", fresh);
+    /* 変わった行は連続する並びに束ねて一度に書き戻す（9マスで1 RPC） */
+    var di = Object.keys(dirty).map(Number).sort(function(a, b){ return a - b; });
+    var p = 0;
+    while(p < di.length){
+      var q = p;
+      while(q + 1 < di.length && di[q + 1] === di[q] + 1) q++;
+      var run = [];
+      for(var j = di[p]; j <= di[q]; j++) run.push(recs[j]);
+      P.putRows("記録", di[p], run);
+      p = q + 1;
+    }
+    P.append("記録", fresh.map(function(i){ return recs[i]; }));
     if(absDirty) P.replace("欠席", absRows);
+    /* 応答用の events はロック内で読んだ・足した行から作る（再読しない）。
+       recs には want の行と今回新しく足した行が入っている */
+    var evEnt = [];
+    Object.keys(recs).forEach(function(k){
+      var r = recs[k];
+      if(r && Domain.asDate(r[0]) === date0) evEnt.push({i:Number(k), row:r});
+    });
+    events = eventsOf(evEnt);
+    /* 先生が直した日の events も同じ行から作る（きょうなら使い回す） */
+    if(markDate){
+      dayEvents = markDate === date0 ? events : eventsOf(
+        Object.keys(recs).map(Number).filter(function(i){
+          return recs[i] && Domain.asDate(recs[i][0]) === markDate;
+        }).map(function(i){ return {i:i, row:recs[i]}; }));
+    }
   });
-  return {processed:processed,
-          state:helperState({days:days, slots:slots, roster:rosterList, settings:settings,
-                             absences:absRows.map(function(r){
-                               return {date:Domain.asDate(r[0]), no:Domain.toInt(r[1])};
-                             }).filter(function(a){ return a.date && a.no; })})};
+  var absList = absRows.map(function(r){
+    return {date:Domain.asDate(r[0]), no:Domain.toInt(r[1])};
+  }).filter(function(a){ return a.date && a.no; });
+  var out = {v:API_VER, processed:processed,
+             state:helperState({days:days, slots:slots, roster:rosterList, settings:settings,
+                                events:events, absences:absList})};
+  /* 先生が「今日の表」から直したときは、直した日の表も一緒に返す
+     （返さないと先生側は apiTeacherDay をもう1往復していた） */
+  if(isTeacher && markDate)
+    out.day = teacherDay(markDate, {days:days, slots:slots, roster:rosterList,
+                                    events:dayEvents, absences:absList,
+                                    exemptions:readExemptions()});
+  return out;
 }
 
 function log(kind, detail, email){
@@ -315,19 +371,25 @@ function log(kind, detail, email){
 }
 
 /* ── 先生の画面 ───────────────────────────── */
+/* 先生の画面と設定系は、いじった直後の新しい値を見せるため常に直読み（raw）。
+   ctx に読み込み済みの表を渡すと、読み直さない（apiMark から） */
+function teacherDay(date, ctx){
+  ctx = ctx || {};
+  var d0 = today();
+  var days = ctx.days || readDays(1), slots = ctx.slots || readSlots(1);
+  var f = itemsFor(date, days, slots);
+  var items = f.draft && date !== d0 ? [] : f.items;
+  var roster = ctx.roster || readRoster(1), absences = ctx.absences || readAbsences();
+  var cells = Domain.dayDetail({date:date, items:items, roster:roster,
+                                events:ctx.events || readEvents(date, date),
+                                absences:absences, exemptions:ctx.exemptions || readExemptions(1)});
+  return {v:API_VER, date:date, wd:Domain.weekday(date), today:d0, hasDay: !f.draft,
+          items:items, slots:slots, roster:roster, cells:cells,
+          absent: absences.filter(function(a){ return a.date === date; }).map(function(a){ return a.no; })};
+}
 function apiTeacherDay(date){
   teacher();
-  var d0 = today();
-  date = Domain.asDate(date) || d0;
-  var f = itemsFor(date);
-  var items = f.draft && date !== d0 ? [] : f.items;
-  var roster = readRoster(), absences = readAbsences();
-  var cells = Domain.dayDetail({date:date, items:items, roster:roster,
-                                events:readEvents(),
-                                absences:absences, exemptions:readExemptions()});
-  return {date:date, wd:Domain.weekday(date), today:d0, hasDay: !f.draft,
-          items:items, slots:readSlots(), roster:roster, cells:cells,
-          absent: absences.filter(function(a){ return a.date === date; }).map(function(a){ return a.no; })};
+  return teacherDay(Domain.asDate(date) || today());
 }
 function apiSaveDay(date, items){
   teacher();
@@ -363,7 +425,10 @@ function apiSetAbsent(date, nos){
 }
 /* 係の画面を開ける児童。いつまでは学期末（3/31・8/31・12/31）が上限。
    空のまま保存すると学期末の日付が入る（Gate.who と同じ決まり） */
-function readHelpers(){
+function readHelpers(raw){
+  return P.cachedRows("係", readHelperRows, raw);
+}
+function readHelperRows(){
   var t = today();
   return P.rows("係").map(function(r){
     var e = Gate.norm(r[0]);
@@ -374,9 +439,9 @@ function readHelpers(){
 }
 function apiSetup(){
   teacher();
-  return {roster:readRoster(), slots:readSlots(), exemptions:readExemptions(),
-          helpers:readHelpers(),
-          settings:readSettings(), icons:ICONS, url:P.url(), sheetUrl:P.sheetUrl(), today:today()};
+  return {v:API_VER, roster:readRoster(1), slots:readSlots(1), exemptions:readExemptions(1),
+          helpers:readHelpers(1),
+          settings:readSettings(1), icons:Domain.ITEM_ICONS, sheetUrl:P.sheetUrl(), today:today()};
 }
 
 function apiSaveSlots(slots){
@@ -389,10 +454,10 @@ function apiSaveSlots(slots){
   var rows = [];
   for(var n = 1; n <= Domain.SLOTS; n++){
     var s = by[n] || {};
-    var icon = ICONS.indexOf(String(s.icon)) >= 0 ? String(s.icon) : ICONS[n - 1];
+    var icon = Domain.ITEM_ICONS.indexOf(String(s.icon)) >= 0 ? String(s.icon) : Domain.ITEM_ICONS[n - 1];
     var name = String(s.name || "").trim().slice(0, 20);
     rows.push([n, name, icon, s.daily && name ? "○" : "",
-               ITEM_COLORS.indexOf(String(s.color)) >= 0 ? String(s.color) : ""]);
+               Domain.ITEM_COLORS.indexOf(String(s.color)) >= 0 ? String(s.color) : ""]);
   }
   P.lock(function(){ P.replace("品目", rows); });
   return apiSetup();
@@ -455,10 +520,10 @@ function apiSaveSettings(s){
 /* 分析。既定は「集計の開始日」から、きのうまで（きょうはまだ途中なので入れない） */
 function apiStats(from, to, item){
   teacher();
-  var st = readSettings(), d0 = today();
+  var st = readSettings(1), d0 = today();
   from = Domain.asDate(from) || st.from || "";
   to = Domain.asDate(to) || Domain.addDays(d0, -1);
-  var days = readDays(), availableItems = [];
+  var days = readDays(1), availableItems = [];
   Object.keys(days).sort().forEach(function(d){
     if(d < from || d > to) return;
     days[d].forEach(function(it){
@@ -467,16 +532,16 @@ function apiStats(from, to, item){
   });
   /* 画面の初回は null で最初の品目を選ぶ。旧呼び出しと空文字は全品目。 */
   item = item === null ? (availableItems[0] || "") : String(item || "");
-  var r = Domain.stats({days:days, roster:readRoster(), events:readEvents(), item:item,
-                        absences:readAbsences(), exemptions:readExemptions(),
+  var r = Domain.stats({days:days, roster:readRoster(1), events:readEvents(from, to), item:item,
+                        absences:readAbsences(), exemptions:readExemptions(1),
                         from:from, to:to, rateMin: st.ratePct / 100, streakMin: st.streakMin});
   r.from = from; r.to = to;
-  r.item = item; r.availableItems = availableItems;
+  r.item = item; r.availableItems = availableItems; r.v = API_VER;
   return r;
 }
 function apiLogs(){
   teacher();
-  return P.tail("操作記録", 60).reverse().map(function(r){
+  return {v:API_VER, list:P.tail("操作記録", 60).reverse().map(function(r){
     return {at:Domain.asStamp(r[0]), kind:String(r[1]), detail:String(r[2]), who:String(r[3])};
-  });
+  })};
 }
