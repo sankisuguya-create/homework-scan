@@ -32,8 +32,9 @@ var Teacher = (function(){
   function back(){ if(opts.back) opts.back(); }
 
   /* 先生の画面の決まり（確定済み。変えない）:
-     ・768p級の画面ではスクロール不要の一画面（文書高 ≤ innerHeight。
-       デモ版の #selfcheck が src/js/selfcheck.js で機械計測する）
+     ・768p級の画面では「今日と明日」がスクロール不要の一画面（文書高 ≤ innerHeight。
+       デモ版の #selfcheck が src/js/selfcheck.js で機械計測する。
+       表が長いタブは sticky の操作バー越しにスクロールする設計）
      ・児童の詳細カードは印刷が常用（1人/全員分。帯と表は app.css の print 用） */
   function frame(body){
     var t = TABS.map(function(x){

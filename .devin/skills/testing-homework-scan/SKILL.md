@@ -39,3 +39,11 @@ description: homework-scan（宿題チェック）デモを Devin VM のブラ�
 
 ## 翻訳ポップアップ
 - file:// の日本語ページで Chrome の翻訳ポップアップが出ることがある。右上のXや別クリックで閉じてから続行。
+
+## 検証のコツ・罠（実測で確立）
+- **キー入力がフォーカス済みボタンを作動させる罠**：係画面の `.cell`・`.who` は `<button>` でクリック後にフォーカスが残る。コンソールや入力欄へキー入力する前に `document.activeElement.blur()` するか余白をクリックしてフォーカスを外すこと — 入力中の空白/Return がボタンのキーボードアクティベーションになり、余分なマス遷移を生成して「記録」を汚す。
+- **係役の格子を時間外に出す**：クライアント側ゲートは `Domain.openAt(Date.now())`（実時計）、モック応答側は `P.now()`。両方パッチ: `Domain.openAt=function(){return true}; P._setNow(Date.UTC(y,m-1,d,1,0,0));`（UTC 01:00=JST 10:00 開室時間帯）してから再読込。staff 役（無印）なら `opts.staff` でゲート無効なので時間を気にしなくてよい。
+- **計測の仕込み**：`window.__td=0; var _o=apiTeacherDay; window.apiTeacherDay=function(){window.__td++;return _o.apply(this,arguments)}` で apiMark の day 応答完結（1往復）を検証できる。差分描画の検証は行に `setAttribute('data-keep','1')` を付けてポーリング更新後も残るか見る（残れば全再構築していない証拠）。
+- **selfcheck の NG 行の読み方**：`#selfcheck` は係画面で `.pane` 数・行容量・チップ残数、先生画面で「今日と明日」タブの文書高≤画面高を0.7秒毎に計測する。**表が長いタブ（今日の表/分析/名簿と品目）は文書が高くなる設計のため assert せず実測だけ残す** — NG が出るのは「今日と明日」でのみ、それ以外のタブは情報行のみ。
+- **`browser_console` の var 宣言は undefined を返す** が実行はされる。結果は `JSON.stringify(...)` で返すと読みやすい。
+- **`P._setNow(ms)` で先生画面の時間依存機能を土日でも検証できる**（home の25秒自動更新など）。`apiMark([...], Date.now())` をコンソールから直接呼ぶと別端末入力を模倣できる（係画面は ~15秒ポーリングか `Helper.refresh()` で反映）。

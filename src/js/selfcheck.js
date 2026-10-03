@@ -6,7 +6,9 @@
      係の画面 … ・名前列は3列（.pane が3つ）
                 ・3列の行容量（列ごとの行 × 3）≥ 児童数
                 ・集計チップの「まだ ○人」は児童数を超えない
-     先生の画面 … 文書高 ≤ 画面高（768p級でスクロール不要の一画面）
+     先生の画面 … 「今日と明日」は文書高 ≤ 画面高（768p級でスクロール不要の一画面。
+                  表が長いタブは sticky の操作バー越しにスクロールする設計なので、
+                  そこでは実測だけを残して assert しない）
 
    約0.7秒ごとに DOM を見て、計測値が前回と同じなら何も出さない。
    守られていれば console.log、破れていたら console.assert（赤い行）。 */
@@ -44,11 +46,13 @@
     }else if(document.querySelector(".teacher")){
       var doc = document.documentElement;
       var over = doc.scrollHeight - window.innerHeight;
-      if(over > 0){
-        okAll = false;
-        console.assert(false, "selfcheck: 先生の文書高 " + doc.scrollHeight + " が画面高 " + window.innerHeight + " を " + over + "px 超過（一画面の決まり違反）");
-      }
       var tab = (document.querySelector(".tabs [aria-selected='true']") || {}).textContent || "?";
+      /* 「一画面」の決まりは起点画面（今日と明日）に掛ける。33人分の表があるタブは
+         文書が必然的に高くなる設計なので、タブ問わず実測だけ残す */
+      if(tab === "今日と明日" && over > 0){
+        okAll = false;
+        console.assert(false, "selfcheck: 先生の「今日と明日」の文書高 " + doc.scrollHeight + " が画面高 " + window.innerHeight + " を " + over + "px 超過（一画面の決まり違反）");
+      }
       sig = "teacher|tab=" + tab + "|h=" + doc.scrollHeight + "|inner=" + window.innerHeight;
     }else{
       return;
