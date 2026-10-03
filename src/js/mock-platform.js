@@ -75,8 +75,23 @@ var P = (function(){
       return out;
     },
     tail: function(n, c){ var t = table(n); return copy(t.slice(Math.max(0, t.length - c))); },
-    append: function(n, list){ var t = table(n); list.forEach(function(r){ t.push(norm(n, r)); }); dropCache(n); save(); memoPull(n); },
-    replace: function(n, list){ db.tables[n] = list.map(function(r){ return norm(n, r); }); dropCache(n); save(); memoPull(n); },
+    /* 実機どおり: メモ配列は rows() の返り値そのものなので、渡された配列を
+       消してから読む順番にすると、rows() を渡した呼び出し側の中身まで消える。
+       本物 Platform.gs と同じバグをここで再現できるように順序をそろえる */
+    append: function(n, list){
+      var cp = list.slice(), t = table(n);
+      cp.forEach(function(r){ t.push(norm(n, r)); });
+      dropCache(n); save(); memoPull(n);
+    },
+    replace: function(n, list){
+      var cp = list.slice();
+      table(n).length = 0;
+      Object.keys(memo.data).forEach(function(k){
+        if(k.indexOf(n + "|") === 0) memo.data[k].length = 0;
+      });
+      cp.forEach(function(r){ table(n).push(norm(n, r)); });
+      dropCache(n); save(); memoPull(n);
+    },
     putRows: function(n, startIdx, list){
       for(var i = 0; i < list.length; i++) db.tables[n][startIdx + i] = norm(n, list[i]);
       dropCache(n); save(); memoPull(n);

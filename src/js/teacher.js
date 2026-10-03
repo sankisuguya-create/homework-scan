@@ -73,9 +73,18 @@ var Teacher = (function(){
     if(!active || tab !== "home" || !H1 || !H2 || H1.date !== H1.today || document.hidden) return;
     call("apiTeacherDay", "").then(function(r){
       if(active && tab === "home"){
+        var itemsChanged = JSON.stringify(H1.items) !== JSON.stringify(r.items);
         H1 = r;
         var el = $("#missing", root);
         if(el) el.innerHTML = missingHtml();
+        /* 別端末が今日の品目を変えていたら品目欄も静かに描き直す。
+           古い品目のまま「決定」を押すと向こうの変更を消してしまう。
+           名前欄にフォーカスがある（=書いている途中）は今回は見送って次の tick に回す */
+        if(itemsChanged){
+          var pane = $('[data-pane="today"]', root), ae = document.activeElement;
+          if(pane && !(ae && ae.tagName === "INPUT" && pane.contains(ae)))
+            pane.outerHTML = dayPane(H1, "today", pane.getAttribute("data-label") || "今日");
+        }
       }
     }).catch(function(){}).then(function(){ homeArm(); });
   }
@@ -255,16 +264,21 @@ var Teacher = (function(){
       .map(function(b){ return Number(b.getAttribute("data-abs")); });
     tcall("apiSetAbsent", D.date, nos).then(function(r){ D = r; ST = null; show(); toast("欠席を保存しました"); });
   }
-  var seq = 0;
+  var seq = 0, ackSeq = 0;
   function tapCell(k){
     var p = k.split(":"), c = D.cells[k] || {};
     var next = Domain.nextState(c.state || "");
     var ev = {id:"t-" + Date.now().toString(36) + "-" + (++seq), date:D.date, no:Number(p[0]), slot:Number(p[1]),
               op: next || "off", at:Date.now(), via:"teacher"};
+    var mine = seq;
     D.cells[k] = {state:next, via:"teacher", at:"", exempt:false};
     show();
-    /* apiMark が直した日の表（day）を返すので、ここでは再取得しない（1往復で済む） */
+    /* apiMark が直した日の表（day）を返すので、ここでは再取得しない（1往復で済む）。
+       応答は新しいものほど後の状態を全部含む。遅れて届いた古い応答は捨てる
+       （連続タップで逆順に届くと、古い表が新しい表を上書きする） */
     tcall("apiMark", [ev], Date.now()).then(function(r){
+      if(mine < ackSeq) return;
+      ackSeq = mine;
       ST = null;
       if(r && r.day){
         D = r.day;

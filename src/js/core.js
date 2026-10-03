@@ -17,14 +17,18 @@ function verWarn(){
     : "アプリの ばんが あっていません。先生に つたえてください。") + "</span>";
   document.body.appendChild(d);
 }
-function verCheck(r){
-  if(r && typeof r === "object" && typeof r.v === "number" && r.v !== WANT_VER) verWarn();
+/* strict: API の応答は新しい版なら必ず v を持つ。v が無い・違う = 古い .gs が
+   残っている（新しい Index.html だけ貼り直したとき）ので、どちらも帯を出す。
+   BOOT は緩く（v が数値のときだけ比べる。デモ版は ?ver= を付けなければ v が無いのが正しい） */
+function verCheck(r, strict){
+  if(!(r && typeof r === "object")) return;
+  if(r.v !== WANT_VER && (typeof r.v === "number" || strict)) verWarn();
 }
 
 function call(name){
   var args = Array.prototype.slice.call(arguments, 1);
   return new Promise(function(resolve, reject){
-    var r = google.script.run.withSuccessHandler(function(v){ verCheck(v); resolve(v); })
+    var r = google.script.run.withSuccessHandler(function(v){ verCheck(v, true); resolve(v); })
       .withFailureHandler(reject);
     r[name].apply(r, args);
   });
