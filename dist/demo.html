@@ -92,16 +92,15 @@ button{cursor:pointer;touch-action:manipulation}
 .pane .head > div{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;min-width:0;font-weight:700;font-size:14px;padding:4px 2px;text-align:center;line-height:1.15;overflow-wrap:anywhere}
 .pane .head .ic{width:1.5em;height:1.5em}
 .pane .head > div:first-child{font-size:12px;white-space:nowrap}
-/* 品目の列の色。アイコンと名前と一緒に出す（色だけで区別しない） */
-.head .t-blue{background:var(--tb);color:var(--ink)}
-.head .t-red{background:var(--tr);color:var(--ink)}
-.head .t-green{background:var(--tg);color:var(--ink)}
-.cell.t-blue,.row.empty .cell.t-blue{background:var(--tb)}
-.cell.t-red,.row.empty .cell.t-red{background:var(--tr)}
-.cell.t-green,.row.empty .cell.t-green{background:var(--tg)}
-.chip.t-blue{background:var(--tb)}
-.chip.t-red{background:var(--tr)}
-.chip.t-green{background:var(--tg)}
+/* 品目の色は小さな面積にだけ載せる（大きな面を薄い色で塗り分けると、
+   まだ何も押していない面と区別がつきにくい）。
+   列の見出しは下の細い帯、集計チップは左の筋。どちらもアイコン＋名前と一緒に出る */
+.head .t-blue{box-shadow:inset 0 -7px 0 var(--tb)}
+.head .t-red{box-shadow:inset 0 -7px 0 var(--tr)}
+.head .t-green{box-shadow:inset 0 -7px 0 var(--tg)}
+.chip.t-blue{box-shadow:inset 6px 0 0 var(--tb)}
+.chip.t-red{box-shadow:inset 6px 0 0 var(--tr)}
+.chip.t-green{box-shadow:inset 6px 0 0 var(--tg)}
 .pick.t-blue{background:var(--tb)}
 .pick.t-red{background:var(--tr)}
 .pick.t-green{background:var(--tg)}
@@ -129,9 +128,6 @@ button{cursor:pointer;touch-action:manipulation}
 .s-rest{background:var(--soft);color:var(--ink)}
 .s-forgot{background:var(--warn);color:var(--ink)}
 .s-doing{background:var(--paper);color:var(--ink);box-shadow:inset 0 0 0 4px var(--ink)}
-.cell.s-doing.t-blue{background:var(--tb)}
-.cell.s-doing.t-red{background:var(--tr)}
-.cell.s-doing.t-green{background:var(--tg)}
 .legend .s-doing{box-shadow:none;border-width:3px}
 .cell.flash{animation:flash .45s}
 @keyframes flash{0%{outline:6px solid var(--ink);outline-offset:-8px}100%{outline:0 solid var(--ink);outline-offset:-8px}}
@@ -1926,11 +1922,9 @@ var Helper = (function(){
   function cellInner(state){
     return '<span class="g" aria-hidden="true">' + markGlyph(state) + '</span>';
   }
-  /* 品目の列の色。空白と △ のマスは列色のまま、○・休・忘 は状態の色を優先する */
-  function tintCls(it, s){ return it.color && (s === "" || s === "doing") ? " t-" + it.color : ""; }
   function cellHtml(no, it, state, excused){
     var s = excused ? "on" : (state || "");
-    return '<button class="cell s-' + (s || "none") + tintCls(it, s) + '" data-k="' + no + ':' + it.slot + '" '
+    return '<button class="cell s-' + (s || "none") + '" data-k="' + no + ':' + it.slot + '" '
          + 'aria-label="' + no + 'ばん ' + esc(it.name) + ' ' + MARK[s].label + '">' + cellInner(s) + '</button>';
   }
   function paintCell(k, state){
@@ -1938,7 +1932,7 @@ var Helper = (function(){
     if(!c) return render();
     var p = k.split(":"), it = itemOf(Number(p[1]));
     var s = state || "";
-    c.className = "cell s-" + (s || "none") + tintCls(it, s);
+    c.className = "cell s-" + (s || "none");
     c.setAttribute("aria-label", p[0] + "ばん " + it.name + " " + MARK[s].label);
     c.innerHTML = cellInner(s);
     flash(c);
@@ -1998,7 +1992,7 @@ var Helper = (function(){
       var st = list[i];
       if(!st){
         h += '<div class="row empty"><div class="who"></div><div class="who"></div>'
-           + S.items.map(function(it){ return '<div class="cell' + (it.color ? " t-" + it.color : "") + '"></div>'; }).join("") + '</div>';
+           + S.items.map(function(it){ return '<div class="cell"></div>'; }).join("") + '</div>';
         continue;
       }
       var ab = !!abs[st.no], lab = st.no + 'ばん 休みの切り替え';
@@ -2085,7 +2079,7 @@ var Helper = (function(){
           last.cells[k] = want;
           var c = root.querySelector('.cell[data-k="' + k + '"]');
           if(c){
-            c.className = "cell s-" + (want || "none") + tintCls(it, want);
+            c.className = "cell s-" + (want || "none");
             c.setAttribute("aria-label", no + "ばん " + it.name + " " + MARK[want].label);
             c.innerHTML = cellInner(want);
           }

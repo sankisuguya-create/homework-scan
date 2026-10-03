@@ -210,11 +210,9 @@ var Helper = (function(){
   function cellInner(state){
     return '<span class="g" aria-hidden="true">' + markGlyph(state) + '</span>';
   }
-  /* 品目の列の色。空白と △ のマスは列色のまま、○・休・忘 は状態の色を優先する */
-  function tintCls(it, s){ return it.color && (s === "" || s === "doing") ? " t-" + it.color : ""; }
   function cellHtml(no, it, state, excused){
     var s = excused ? "on" : (state || "");
-    return '<button class="cell s-' + (s || "none") + tintCls(it, s) + '" data-k="' + no + ':' + it.slot + '" '
+    return '<button class="cell s-' + (s || "none") + '" data-k="' + no + ':' + it.slot + '" '
          + 'aria-label="' + no + 'ばん ' + esc(it.name) + ' ' + MARK[s].label + '">' + cellInner(s) + '</button>';
   }
   function paintCell(k, state){
@@ -222,7 +220,7 @@ var Helper = (function(){
     if(!c) return render();
     var p = k.split(":"), it = itemOf(Number(p[1]));
     var s = state || "";
-    c.className = "cell s-" + (s || "none") + tintCls(it, s);
+    c.className = "cell s-" + (s || "none");
     c.setAttribute("aria-label", p[0] + "ばん " + it.name + " " + MARK[s].label);
     c.innerHTML = cellInner(s);
     flash(c);
@@ -282,7 +280,7 @@ var Helper = (function(){
       var st = list[i];
       if(!st){
         h += '<div class="row empty"><div class="who"></div><div class="who"></div>'
-           + S.items.map(function(it){ return '<div class="cell' + (it.color ? " t-" + it.color : "") + '"></div>'; }).join("") + '</div>';
+           + S.items.map(function(it){ return '<div class="cell"></div>'; }).join("") + '</div>';
         continue;
       }
       var ab = !!abs[st.no], lab = st.no + 'ばん 休みの切り替え';
@@ -369,7 +367,7 @@ var Helper = (function(){
           last.cells[k] = want;
           var c = root.querySelector('.cell[data-k="' + k + '"]');
           if(c){
-            c.className = "cell s-" + (want || "none") + tintCls(it, want);
+            c.className = "cell s-" + (want || "none");
             c.setAttribute("aria-label", no + "ばん " + it.name + " " + MARK[want].label);
             c.innerHTML = cellInner(want);
           }
