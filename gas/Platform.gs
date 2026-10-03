@@ -31,7 +31,7 @@ var P = (function(){
   /* シートが無ければ見出し付きで作る。列は文字として持つ（日付の自動変換を止める）。
      スキーマより狭い既存のシートは、列を足して見出しを書き直す（＝表の定義を変えたときの移行） */
   function sheet(name){
-    var head = TABLES[name];
+    var head = Domain.SCHEMA[name];   /* 表の定義は Domain が正本 */
     if(!head) throw new Error("知らない表: " + name);
     if(memo.sheet[name]) return memo.sheet[name];
     var ss = book(), sh = ss.getSheetByName(name);
@@ -40,7 +40,8 @@ var P = (function(){
       sh.getRange(1, 1, 1, head.length).setValues([head]).setFontWeight("bold");
       sh.getRange(1, 1, sh.getMaxRows(), head.length).setNumberFormat("@");
       sh.setFrozenRows(1);
-      if(DEFAULT_ROWS[name]) sh.getRange(2, 1, DEFAULT_ROWS[name].length, head.length).setValues(DEFAULT_ROWS[name]);
+      var defs = Domain.DEFAULT_ROWS[name];
+      if(defs) sh.getRange(2, 1, defs.length, head.length).setValues(defs);
     }else{
       var hasHead = sh.getRange(1, 1, 1, head.length).getValues()[0];
       if(String(hasHead[head.length - 1]) === ""){
@@ -52,7 +53,7 @@ var P = (function(){
     return sh;
   }
 
-  function width(name){ return TABLES[name].length; }
+  function width(name){ return Domain.SCHEMA[name].length; }
 
   function rows(name){
     var k = mkey(name, width(name));
@@ -177,7 +178,7 @@ var P = (function(){
 
 /* 最初に1回、Apps Script エディタから実行する。表を全部作る。 */
 function setupSheets(){
-  Object.keys(TABLES).forEach(function(name){ P.rows(name); });
+  Object.keys(Domain.SCHEMA).forEach(function(name){ P.rows(name); });
   var first = SpreadsheetApp.getActive().getSheetByName("シート1");
   if(first && first.getLastRow() === 0 && SpreadsheetApp.getActive().getSheets().length > 1)
     SpreadsheetApp.getActive().deleteSheet(first);

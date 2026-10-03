@@ -14,48 +14,17 @@
        同じファイルをそのまま動かすため。
 ================================================================== */
 
-var TABLES = {
-  /* 名簿は算数タイムアタックと同じ並び。先生がシートに直接貼り付ける（サイトでは編集しない） */
-  "名簿":     ["メールアドレス", "学年", "組", "番号", "氏名"],
-  "品目":     ["枠", "名前", "アイコン", "いつも出す", "色"],
-  "日の品目": ["日付", "枠", "名前"],
-  "記録":     ["日付", "番号", "枠1", "枠2", "枠3", "枠4", "枠5", "枠6", "枠7", "枠8", "枠9"],
-  "欠席":     ["日付", "番号"],
-  "免除":     ["開始日", "終了日", "番号", "枠", "メモ"],
-  "操作記録": ["時刻", "種類", "内容", "利用者"],
-  "設定":     ["項目", "値"],
-  "係":       ["メールアドレス", "いつまで", "メモ"]
-};
-var ICONS = ["book", "calc", "note", "pencil", "paper", "star", "music", "bag", "abc"];
-var ITEM_COLORS = ["blue", "red", "green"];   /* 品目の列の色。名前は係の画面の t-… に対応 */
-var DEFAULT_ROWS = {
-  "品目": [
-    ["1", "漢字ドリル", "book",   "○", "red"],
-    ["2", "計算ドリル", "calc",   "○", "blue"],
-    ["3", "連絡帳",     "note",   "○", "green"],
-    ["4", "", "pencil", "", ""], ["5", "", "paper", "", ""], ["6", "", "star",  "", ""],
-    ["7", "", "music",  "", ""], ["8", "", "bag",   "", ""], ["9", "", "abc",   "", ""]
-  ],
-  "設定": [
-    ["提出率の目安（%）", "80"],
-    ["続けて出ていない日の目安", "3"],
-    ["係の画面に氏名を出す", "出す"],
-    ["集計の開始日", ""],
-    ["校内のIP", ""]
-  ]
-};
-var OP  = {on:"提出", rest:"休み", forgot:"忘れた", doing:"やっている", off:"空白"};
-var VIA = {tap:"タップ", teacher:"先生"};
-var GLYPH = {on:"○", rest:"休", forgot:"忘", doing:"△", off:"消"};
+/* 表の列構成・マスの字・品目のアイコンと色の決まりは Domain.gs が正本
+   （Domain.SCHEMA / Domain.MARKS / Domain.GLYPH / Domain.OP / Domain.GLYPH_R /
+   Domain.ITEM_ICONS / Domain.ITEM_COLORS / Domain.DEFAULT_ROWS）。
+   トップレベルの var にはしない —— .gs の評価順を運用側が決めるため、
+   Domain の値はすべて関数の中で使う */
 var MARK_GRACE = 10;   /* 14:00 の閉室を過ぎても、少し前に押した分を受ける幅（分） */
 
 /* サーバ側の版。画面（src/js/core.js の WANT_VER）と数を揃える。
    デプロイは Index.html＋.gs の手貼りなので、片方だけ古い組み合わせがあり得る。
    api の応答と boot に v で載せ、ずれていたら画面側が警告を出す */
 var API_VER = 1;
-
-function invert(o){ var r = {}; Object.keys(o).forEach(function(k){ r[o[k]] = k; }); return r; }
-var GLYPH_R = invert(GLYPH);
 
 /* ── 関門 ───────────────────────────────── */
 /* 教職員、または「係」シートの児童（期限内）。どちらでもなければ例外 */
@@ -96,13 +65,13 @@ function readSlotsRows(){
     var s = Domain.toInt(r[0]);
     if(s == null || s < 1 || s > Domain.SLOTS) return;
     bySlot[s] = {slot:s, name:String(r[1] || "").trim(),
-                 icon: ICONS.indexOf(String(r[2])) >= 0 ? String(r[2]) : ICONS[s - 1],
+                 icon: Domain.ITEM_ICONS.indexOf(String(r[2])) >= 0 ? String(r[2]) : Domain.ITEM_ICONS[s - 1],
                  daily: String(r[3] || "").trim() !== "",
-                 color: ITEM_COLORS.indexOf(String(r[4])) >= 0 ? String(r[4]) : ""};
+                 color: Domain.ITEM_COLORS.indexOf(String(r[4])) >= 0 ? String(r[4]) : ""};
   });
   var out = [];
   for(var s = 1; s <= Domain.SLOTS; s++)
-    out.push(bySlot[s] || {slot:s, name:"", icon:ICONS[s - 1], daily:false, color:""});
+    out.push(bySlot[s] || {slot:s, name:"", icon:Domain.ITEM_ICONS[s - 1], daily:false, color:""});
   return out;
 }
 function readDays(raw){
@@ -125,12 +94,12 @@ function readDaysRows(){
    "消" は空白に戻した印（欠席の「休」より強い）。 */ 
 function recCellParse(v){
   var m = /^(\*)?([○休忘△消])(?:\s+(\d{1,2}):(\d{2}))?$/.exec(String(v == null ? "" : v).trim());
-  if(!m || !GLYPH_R[m[2]]) return null;
-  return {op:GLYPH_R[m[2]], via:m[1] ? "teacher" : "tap",
+  if(!m || !Domain.GLYPH_R[m[2]]) return null;
+  return {op:Domain.GLYPH_R[m[2]], via:m[1] ? "teacher" : "tap",
           hm:m[3] == null ? null : Number(m[3]) * 60 + Number(m[4])};
 }
 function recCellText(op, via, atMs){
-  var s = (via === "teacher" ? "*" : "") + GLYPH[op];
+  var s = (via === "teacher" ? "*" : "") + Domain.GLYPH[op];
   if(atMs != null){ var p = Domain.jstParts(atMs); s += " " + p.h + ":" + Domain.pad(p.mi); }
   return s;
 }
@@ -333,9 +302,9 @@ function apiMark(events, sentAt){
       }
       var items = date === date0 ? (days[date] || dailyItems(slots)) : days[date];
       if(!items || !items.some(function(it){ return it.slot === slot; })) return;
-      if(!OP[e.op]) return;
-      var via = VIA[e.via] ? e.via : "tap";
-      if(via === "teacher" && !isTeacher) via = "tap";
+      if(!Domain.OP[e.op]) return;
+      /* 先生の印は教師アカウントだけが立てる（児童側から 'teacher' を名乗られない） */
+      var via = (e.via === "teacher" && isTeacher) ? "teacher" : "tap";
       var at = Number(e.at) + skew;
       if(!isFinite(at) || at > now + 5 * 60000 || at < now - 8 * 86400000) at = now;
       if(date === date0) ensureDay(date, days, slots);
@@ -472,7 +441,7 @@ function apiSetup(){
   teacher();
   return {v:API_VER, roster:readRoster(1), slots:readSlots(1), exemptions:readExemptions(1),
           helpers:readHelpers(1),
-          settings:readSettings(1), icons:ICONS, sheetUrl:P.sheetUrl(), today:today()};
+          settings:readSettings(1), icons:Domain.ITEM_ICONS, sheetUrl:P.sheetUrl(), today:today()};
 }
 
 function apiSaveSlots(slots){
@@ -485,10 +454,10 @@ function apiSaveSlots(slots){
   var rows = [];
   for(var n = 1; n <= Domain.SLOTS; n++){
     var s = by[n] || {};
-    var icon = ICONS.indexOf(String(s.icon)) >= 0 ? String(s.icon) : ICONS[n - 1];
+    var icon = Domain.ITEM_ICONS.indexOf(String(s.icon)) >= 0 ? String(s.icon) : Domain.ITEM_ICONS[n - 1];
     var name = String(s.name || "").trim().slice(0, 20);
     rows.push([n, name, icon, s.daily && name ? "○" : "",
-               ITEM_COLORS.indexOf(String(s.color)) >= 0 ? String(s.color) : ""]);
+               Domain.ITEM_COLORS.indexOf(String(s.color)) >= 0 ? String(s.color) : ""]);
   }
   P.lock(function(){ P.replace("品目", rows); });
   return apiSetup();

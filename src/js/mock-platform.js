@@ -8,8 +8,8 @@ var P = (function(){
 
   function fresh(){
     var t = {};
-    Object.keys(TABLES).forEach(function(n){
-      t[n] = (DEFAULT_ROWS[n] || []).map(function(r){ return r.map(String); });
+    Object.keys(Domain.SCHEMA).forEach(function(n){
+      t[n] = (Domain.DEFAULT_ROWS[n] || []).map(function(r){ return r.map(String); });
     });
     return {tables:t, props:{}, cache:{}};
   }
@@ -21,14 +21,14 @@ var P = (function(){
   }
   function save(){ if(hasLS){ try{ localStorage.setItem(KEY, JSON.stringify(db)); }catch(e){} } }
   function table(n){
-    if(!TABLES[n]) throw new Error("知らない表: " + n);
+    if(!Domain.SCHEMA[n]) throw new Error("知らない表: " + n);
     if(!db.tables[n]) db.tables[n] = [];
     return db.tables[n];
   }
   function copy(rows){ return rows.map(function(r){ return r.slice(); }); }
   function norm(n, row){
     var out = [];
-    for(var i = 0; i < TABLES[n].length; i++) out.push(row[i] == null ? "" : String(row[i]));
+    for(var i = 0; i < Domain.SCHEMA[n].length; i++) out.push(row[i] == null ? "" : String(row[i]));
     return out;
   }
 
@@ -67,10 +67,10 @@ var P = (function(){
       api.cachePut(key, JSON.stringify(r), 90);
       return r;
     },
-    rows: function(n){ return rmemo(n, TABLES[n].length); },
-    cols: function(n, w){ return rmemo(n, Math.min(w, TABLES[n].length)); },
+    rows: function(n){ return rmemo(n, Domain.SCHEMA[n].length); },
+    cols: function(n, w){ return rmemo(n, Math.min(w, Domain.SCHEMA[n].length)); },
     rowsAt: function(n, idx){
-      var t = rmemo(n, TABLES[n].length), out = {};
+      var t = rmemo(n, Domain.SCHEMA[n].length), out = {};
       idx.forEach(function(i){ out[i] = t[i] ? t[i].slice() : null; });
       return out;
     },

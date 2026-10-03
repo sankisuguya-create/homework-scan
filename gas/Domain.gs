@@ -28,6 +28,62 @@ var Domain = (function(){
   function nextState(s){ return NEXT[s || ""] == null ? "on" : NEXT[s || ""]; }
   function counts(s){ return !!COUNTS[s]; }
 
+  /* ── 語彙の正本 ─────────────────────────────
+     記録のセルの字・マスの状態の呼び名・品目のアイコンと色・表の列構成は、
+     サーバと両画面が共有する決まりなのでここにだけ置く。画面側の表記は
+     ここから派生させる（片方だけ直してずれる、を防ぐ） */
+  var MARKS = {   /* マスの状態：「記録」の字 / 操作の名まえ / 画面の呼び名 */
+    on:     {glyph:"○", op:"提出",       label:"出した"},
+    rest:   {glyph:"休", op:"休み",       label:"休み"},
+    forgot: {glyph:"忘", op:"忘れた",     label:"わすれた"},
+    doing:  {glyph:"△", op:"やっている", label:"やっている"},
+    /* 「消」は空白に戻した印（欠席の「休」より強い）。集計では空白にたたまれる
+       ので画面に出ることはない —— サーバ側だけが使う */
+    off:    {glyph:"消", op:"空白",       label:"空白"}
+  };
+  /* MARKS から派生する表（直すのは MARKS だけでよい） */
+  var GLYPH = {}, GLYPH_R = {}, OP = {};
+  Object.keys(MARKS).forEach(function(k){
+    GLYPH[k] = MARKS[k].glyph;
+    GLYPH_R[MARKS[k].glyph] = k;
+    OP[k] = MARKS[k].op;
+  });
+
+  var ITEM_ICONS = ["book", "calc", "note", "pencil", "paper", "star", "music", "bag", "abc"];
+  var ICON_LABEL = {book:"本", calc:"計算", note:"連絡帳", pencil:"鉛筆", paper:"プリント",
+                    star:"星", music:"音楽", bag:"かばん", abc:"英語"};
+  var ITEM_COLORS = ["blue", "red", "green"];   /* 品目の色。係の画面の細い帯の t-… に対応 */
+  var COLOR_LABEL = {blue:"薄い青", red:"薄い赤", green:"薄い緑"};
+
+  /* 表の列構成。名簿は算数タイムアタックと同じ並び（先生がシートに直接貼る） */
+  var SCHEMA = {
+    "名簿":     ["メールアドレス", "学年", "組", "番号", "氏名"],
+    "品目":     ["枠", "名前", "アイコン", "いつも出す", "色"],
+    "日の品目": ["日付", "枠", "名前"],
+    "記録":     (function(){ var h = ["日付", "番号"]; for(var i = 1; i <= SLOTS; i++) h.push("枠" + i); return h; })(),
+    "欠席":     ["日付", "番号"],
+    "免除":     ["開始日", "終了日", "番号", "枠", "メモ"],
+    "操作記録": ["時刻", "種類", "内容", "利用者"],
+    "設定":     ["項目", "値"],
+    "係":       ["メールアドレス", "いつまで", "メモ"]
+  };
+  var DEFAULT_ROWS = {
+    "品目": [
+      ["1", "漢字ドリル", "book",   "○", "red"],
+      ["2", "計算ドリル", "calc",   "○", "blue"],
+      ["3", "連絡帳",     "note",   "○", "green"],
+      ["4", "", "pencil", "", ""], ["5", "", "paper", "", ""], ["6", "", "star",  "", ""],
+      ["7", "", "music",  "", ""], ["8", "", "bag",   "", ""], ["9", "", "abc",   "", ""]
+    ],
+    "設定": [
+      ["提出率の目安（%）", "80"],
+      ["続けて出ていない日の目安", "3"],
+      ["係の画面に氏名を出す", "出す"],
+      ["集計の開始日", ""],
+      ["校内のIP", ""]
+    ]
+  };
+
   function pad(n){ return (n < 10 ? "0" : "") + n; }
 
   function jstParts(ms){
@@ -398,6 +454,10 @@ var Domain = (function(){
     nextSchoolDay:nextSchoolDay, schoolDay:schoolDay,
     OPEN:OPEN, openAt:openAt, ip4num:ip4num, ipAllowed:ipAllowed,
     isExempt:isExempt, finalMarks:finalMarks, dayView:dayView, dayDetail:dayDetail,
-    stats:stats, parseRoster:parseRoster
+    stats:stats, parseRoster:parseRoster,
+    MARKS:MARKS, GLYPH:GLYPH, GLYPH_R:GLYPH_R, OP:OP,
+    ITEM_ICONS:ITEM_ICONS, ICON_LABEL:ICON_LABEL,
+    ITEM_COLORS:ITEM_COLORS, COLOR_LABEL:COLOR_LABEL,
+    SCHEMA:SCHEMA, DEFAULT_ROWS:DEFAULT_ROWS
   };
 })();

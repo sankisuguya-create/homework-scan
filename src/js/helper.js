@@ -12,13 +12,15 @@
      「校内のIP」がせっていに入っていると、校外のネットワークでは開けない
      （端末が自分の外IPを調べて、校内のIPと合うか見る。先生には関門なし）
 ================================================================== */
-var MARK = {
-  on:     {ch:"○", label:"出した"},
-  rest:   {ch:"休", label:"休み"},
-  forgot: {ch:"忘", label:"わすれた"},
-  doing:  {ch:"△", label:"やっている"},
-  "":     {ch:"",  label:"まだ"}
-};
+/* マスの状態の字と呼び名は Domain.MARKS が正本。
+   「まだ」（空白）は画面だけの表示なのでここで足す */
+var MARK = (function(){
+  var m = {"":{ch:"", label:"まだ"}};
+  ["on", "rest", "forgot", "doing"].forEach(function(k){
+    m[k] = {ch:Domain.MARKS[k].glyph, label:Domain.MARKS[k].label};
+  });
+  return m;
+})();
 /* ○ と △ は字だと線が細いので、太い線の図形で描く */
 var MARK_SVG = {
   on:    '<svg class="gm" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.6" fill="none" stroke="currentColor" stroke-width="3.4"/></svg>',
