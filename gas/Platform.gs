@@ -131,9 +131,6 @@ var P = (function(){
     append(name, list);
   }
 
-  function prop(key){ return PropertiesService.getScriptProperties().getProperty(key); }
-  function setProp(key, val){ PropertiesService.getScriptProperties().setProperty(key, val); }
-
   function cache(){ return CacheService.getScriptCache(); }
   function cacheGet(key){ return cache().get(key); }
   function cachePut(key, val, sec){ cache().put(key, String(val), sec); }
@@ -162,17 +159,12 @@ var P = (function(){
   }
 
   function now(){ return Date.now(); }
-  function uuid(){ return Utilities.getUuid(); }
-  function hash(s){
-    var b = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, s, Utilities.Charset.UTF_8);
-    return b.map(function(x){ return ((x + 256) % 256).toString(16).replace(/^(.)$/, "0$1"); }).join("");
-  }
   function sheetUrl(){ try{ return book().getUrl() || ""; }catch(err){ return ""; } }
 
   return {rows:rows, tail:tail, cols:cols, rowsAt:rowsAt,
           append:append, replace:replace, putRows:putRows, cachedRows:cachedRows,
-          prop:prop, setProp:setProp, cacheGet:cacheGet, cachePut:cachePut, cacheDel:cacheDel,
-          lock:lock, now:now, uuid:uuid, hash:hash, sheetUrl:sheetUrl,
+          cacheGet:cacheGet, cachePut:cachePut, cacheDel:cacheDel,
+          lock:lock, now:now, sheetUrl:sheetUrl,
           who:function(){ return Gate.checkAny(); }};
 })();
 

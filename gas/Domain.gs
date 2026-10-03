@@ -4,7 +4,7 @@
    シートも Apps Script の API も触らない。だから同じファイルを
      ・Apps Script（Api.gs から呼ぶ）
      ・デモ版（dist/demo.html に差し込む）
-     ・手元の検査（node tests/domain.test.js）
+     ・手元の検査（node tests/server.test.js）
    の3か所で使う。決まりを変えるときはここだけを直す。
 
    ■ 日付と時刻

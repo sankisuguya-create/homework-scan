@@ -49,13 +49,6 @@ var Gate = (function(){
     catch(err){ return ""; }
   }
 
-  /* サーバ関数の1行目で呼ぶ。staff でなければ例外を投げる。 */
-  function check(){
-    var j = judge(activeEmail());
-    if(!j.ok) throw new Error("先生のアカウントで開いてください。（" + j.why + "）");
-    return j;
-  }
-
   /* 教職員でなければ「係」シートと照合する。いつまでは YYYY-MM-DD 必須で、
      apiSaveHelpers が学期末（3/31・8/31・12/31の直近）を上限に書き込む。
      空・読めない・期限切れはすべて role:none（閉じる側に倒す）。 */
@@ -96,6 +89,6 @@ var Gate = (function(){
       .setTitle("宿題チェック");
   }
 
-  return {judge:judge, check:check, who:who, checkAny:checkAny, norm:norm,
+  return {judge:judge, who:who, checkAny:checkAny, norm:norm,
           activeEmail:activeEmail, denyPage:denyPage, STAFF_DOMAIN:STAFF_DOMAIN};
 })();

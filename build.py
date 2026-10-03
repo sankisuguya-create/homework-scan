@@ -26,9 +26,14 @@ OUT_DEMO = ROOT / "dist" / "demo.html"
 INCLUDE = re.compile(r'^([ \t]*)/\* @include ([\w./\-]+) \*/[ \t]*$', re.M)
 DEMO_SCRIPTS = ["../gas/Api.gs", "js/mock-platform.js", "js/demo-seed.js", "js/mock-run.js",
                 "js/selfcheck.js"]
-DEMO_BOOT = ('{view: /teacher/.test(location.hash) ? "teacher" : "helper", '
-             'url: "", demo: true, '
-             'role: /helper/.test(location.hash) ? "helper" : "staff"}')
+# ?view= は本番（doGet の ?view=teacher）と同じ形に揃えている。
+# ?role= と ?ver= はデモ固有の検証用パラメータ（本番では役はサーバがアカウントから
+# 決める。?ver=0 を付けると版ずれの警告バナーを試せる）。ハッシュの #helper/#teacher
+# は後方互換で残す（URL パラメータが優先）。
+DEMO_BOOT = ('(function(){var q = new URLSearchParams(location.search), h = location.hash;'
+             'return {view: q.get("view") || (/teacher/.test(h) ? "teacher" : "helper"),'
+             '        role: q.get("role") || (/helper/.test(h) ? "helper" : "staff"),'
+             '        v: q.get("ver") != null ? +q.get("ver") : undefined};})()')
 BANNER = ("<!-- このファイルは src/ から build.py が作る。\n"
           "     直すのは src/ のほう。ここを直しても次のビルドで消える。 -->\n")
 

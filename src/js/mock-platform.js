@@ -11,7 +11,7 @@ var P = (function(){
     Object.keys(Domain.SCHEMA).forEach(function(n){
       t[n] = (Domain.DEFAULT_ROWS[n] || []).map(function(r){ return r.map(String); });
     });
-    return {tables:t, props:{}, cache:{}};
+    return {tables:t, cache:{}};
   }
   function load(){
     if(hasLS){
@@ -81,8 +81,6 @@ var P = (function(){
       for(var i = 0; i < list.length; i++) db.tables[n][startIdx + i] = norm(n, list[i]);
       dropCache(n); save(); memoPull(n);
     },
-    prop: function(k){ return db.props[k] == null ? null : db.props[k]; },
-    setProp: function(k, v){ db.props[k] = String(v); save(); },
     cacheGet: function(k){
       if(!cacheOn) return null;
       var c = db.cache[k];
@@ -94,19 +92,6 @@ var P = (function(){
     cacheDel: function(k){ delete db.cache[k]; save(); },
     lock: function(fn){ return fn(); },
     now: function(){ return Date.now() + offset; },
-    uuid: function(){
-      var s = "";
-      for(var i = 0; i < 32; i++) s += Math.floor(Math.random() * 16).toString(16);
-      return s.slice(0, 8) + "-" + s.slice(8, 12) + "-" + s.slice(12, 16) + "-" + s.slice(16, 20) + "-" + s.slice(20);
-    },
-    hash: function(s){
-      var h1 = 0x811c9dc5, h2 = 0x01000193;
-      for(var i = 0; i < s.length; i++){
-        h1 = Math.imul(h1 ^ s.charCodeAt(i), 16777619) >>> 0;
-        h2 = Math.imul(h2 + s.charCodeAt(i), 2246822519) >>> 0;
-      }
-      return h1.toString(16) + h2.toString(16);
-    },
     sheetUrl: function(){ return ""; },
     who: function(){ return Gate.checkAny(); },
 
@@ -122,7 +107,6 @@ var P = (function(){
 })();
 
 var Gate = (typeof Gate !== "undefined") ? Gate : {
-  check: function(){ return {ok:true, email:"demo@edu.nishi.or.jp"}; },
   who: function(){ return {role:"staff", email:"demo@edu.nishi.or.jp", code:""}; },
   checkAny: function(){ return {role:"staff", email:"demo@edu.nishi.or.jp", code:""}; },
   norm: function(raw){
