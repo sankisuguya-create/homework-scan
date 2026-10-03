@@ -105,6 +105,7 @@ var P = (function(){
     var rng = sh.getRange(r, 1, list.length, w);
     rng.setNumberFormat("@");
     rng.setValues(list.map(function(row){ return normRow(row, w); }));
+    dropCache(name);
     memoSync(name, function(arr, w){
       for(var i = 0; i < list.length; i++) arr.push(normRow(list[i], w));
     });
@@ -116,6 +117,7 @@ var P = (function(){
     var rng = sh.getRange(startIdx + 2, 1, list.length, w);
     rng.setNumberFormat("@");
     rng.setValues(list.map(function(row){ return normRow(row, w); }));
+    dropCache(name);
     memoSync(name, function(arr, w){
       for(var i = 0; i < list.length; i++) arr[startIdx + i] = normRow(list[i], w);
     });
@@ -123,6 +125,7 @@ var P = (function(){
   function replace(name, list){
     var sh = sheet(name), w = width(name), last = sh.getLastRow();
     if(last > 1) sh.getRange(2, 1, last - 1, w).clearContent();
+    dropCache(name);
     memoSync(name, function(arr){ arr.length = 0; });
     append(name, list);
   }
@@ -134,6 +137,22 @@ var P = (function(){
   function cacheGet(key){ return cache().get(key); }
   function cachePut(key, val, sec){ cache().put(key, String(val), sec); }
   function cacheDel(key){ cache().remove(key); }
+
+  /* キャッシュする表（小さくて変化の少ないもの）。係端末が15秒ごとに同じ表を
+     読みに来るので、90秒のあいだはシートを読まない。書き込みは必ずここを通るので
+     append/replace/putRows がキャッシュを消す（シートを直接いじったときだけ
+     最大90秒の遅れが出る。これは許容する）。記録・欠席・操作記録は載せない。 */
+  var CACHED = {"名簿":1, "品目":1, "設定":1, "免除":1, "係":1, "日の品目":1};
+  function dropCache(name){ if(CACHED[name]) try{ cacheDel("t:" + name); }catch(err){} }
+  function cachedRows(name, reader, raw){
+    if(raw) return reader();
+    var key = "t:" + name, hit = null;
+    try{ hit = cacheGet(key); }catch(err){}
+    if(hit != null){ try{ return JSON.parse(hit); }catch(err){} }
+    var r = reader();
+    try{ cachePut(key, JSON.stringify(r), 90); }catch(err){}
+    return r;
+  }
 
   function lock(fn){
     var l = LockService.getScriptLock();
@@ -150,7 +169,7 @@ var P = (function(){
   function sheetUrl(){ try{ return book().getUrl() || ""; }catch(err){ return ""; } }
 
   return {rows:rows, tail:tail, cols:cols, rowsAt:rowsAt,
-          append:append, replace:replace, putRows:putRows,
+          append:append, replace:replace, putRows:putRows, cachedRows:cachedRows,
           prop:prop, setProp:setProp, cacheGet:cacheGet, cachePut:cachePut, cacheDel:cacheDel,
           lock:lock, now:now, uuid:uuid, hash:hash, sheetUrl:sheetUrl,
           who:function(){ return Gate.checkAny(); }};

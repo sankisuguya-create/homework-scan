@@ -67,7 +67,9 @@ var Gate = (function(){
     var hit = false;
     try{
       var t = Domain.jstDate(P.now());
-      P.rows("係").forEach(function(r){
+      /* 「係」はキャッシュ可（係の画面の往復が多い）。保存は cacheDel で消えるので、
+         残る遅れはシートを直接いじった場合の最大90秒だけ —— 係の期限切れは許容する */
+      P.cachedRows("係", function(){ return P.rows("係"); }).forEach(function(r){
         var u = Domain.asDate(r[1]);
         if(norm(r[0]) === e && u && t <= u) hit = true;
       });

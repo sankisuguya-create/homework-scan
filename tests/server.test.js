@@ -206,6 +206,23 @@ console.log("■ 記録の行が日付順でなくても索引で正しい行を
      s.apiTeacherDay(past).cells["1:2"]);
 }
 
+console.log("■ 小表のキャッシュ（P1）");
+{
+  const a = fresh(), b = fresh();
+  b.P._setCache(false);
+  ok("キャッシュ経路と非経路で apiToday が一致",
+    JSON.stringify(a.apiToday()) === JSON.stringify(b.apiToday()));
+  ok("apiTeacherDay が一致",
+    JSON.stringify(a.apiTeacherDay("")) === JSON.stringify(b.apiTeacherDay("")));
+  /* 書き込みは P の append/replace/putRows が消すので、保存直後に新しい値が見える */
+  a.apiSaveSettings({ratePct:70, streakMin:5, showNames:false, from:"", netIps:""});
+  ok("設定保存後の apiToday に反映（名前を出さない）",
+    a.apiToday().roster.every(x => x.name === ""), a.apiToday().roster);
+  a.apiSaveDay("2026-09-26", [{slot:1, name:"漢字"}]);
+  ok("品目保存後の apiTeacherDay は新しい品目",
+    a.apiTeacherDay("2026-09-26").items.length === 1);
+}
+
 console.log("■ 先生が品目・名簿・過去の日を直す");
 {
   const s = fresh();

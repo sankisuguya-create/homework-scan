@@ -53,7 +53,20 @@ var P = (function(){
     });
   }
 
+  /* Platform.gs の CACHED と同じ表。書き込み時にキャッシュを消す */
+  var CACHED = {"名簿":1, "品目":1, "設定":1, "免除":1, "係":1, "日の品目":1};
+  var cacheOn = true;
+  function dropCache(n){ if(CACHED[n]) delete db.cache["t:" + n]; }
+
   var api = {
+    cachedRows: function(n, reader, raw){
+      if(raw || !cacheOn) return reader();
+      var key = "t:" + n, hit = api.cacheGet(key);
+      if(hit != null){ try{ return JSON.parse(hit); }catch(e){} }
+      var r = reader();
+      api.cachePut(key, JSON.stringify(r), 90);
+      return r;
+    },
     rows: function(n){ return rmemo(n, TABLES[n].length); },
     cols: function(n, w){ return rmemo(n, Math.min(w, TABLES[n].length)); },
     rowsAt: function(n, idx){
@@ -62,21 +75,22 @@ var P = (function(){
       return out;
     },
     tail: function(n, c){ var t = table(n); return copy(t.slice(Math.max(0, t.length - c))); },
-    append: function(n, list){ var t = table(n); list.forEach(function(r){ t.push(norm(n, r)); }); save(); memoPull(n); },
-    replace: function(n, list){ db.tables[n] = list.map(function(r){ return norm(n, r); }); save(); memoPull(n); },
+    append: function(n, list){ var t = table(n); list.forEach(function(r){ t.push(norm(n, r)); }); dropCache(n); save(); memoPull(n); },
+    replace: function(n, list){ db.tables[n] = list.map(function(r){ return norm(n, r); }); dropCache(n); save(); memoPull(n); },
     putRows: function(n, startIdx, list){
       for(var i = 0; i < list.length; i++) db.tables[n][startIdx + i] = norm(n, list[i]);
-      save(); memoPull(n);
+      dropCache(n); save(); memoPull(n);
     },
     prop: function(k){ return db.props[k] == null ? null : db.props[k]; },
     setProp: function(k, v){ db.props[k] = String(v); save(); },
     cacheGet: function(k){
+      if(!cacheOn) return null;
       var c = db.cache[k];
       if(!c) return null;
       if(c.until < api.now()){ delete db.cache[k]; save(); return null; }
       return c.v;
     },
-    cachePut: function(k, v, sec){ db.cache[k] = {v:String(v), until: api.now() + sec * 1000}; save(); },
+    cachePut: function(k, v, sec){ if(!cacheOn) return; db.cache[k] = {v:String(v), until: api.now() + sec * 1000}; save(); },
     cacheDel: function(k){ delete db.cache[k]; save(); },
     lock: function(fn){ return fn(); },
     now: function(){ return Date.now() + offset; },
@@ -97,8 +111,9 @@ var P = (function(){
     who: function(){ return Gate.checkAny(); },
 
     /* 検査とデモのための口。本物の Platform.gs には無い */
-    _reset: function(){ db = fresh(); memo.data = {}; memoOn = true; save(); },
+    _reset: function(){ db = fresh(); memo.data = {}; memoOn = true; cacheOn = true; save(); },
     _setMemo: function(on){ memoOn = !!on; if(!memoOn) memo.data = {}; },
+    _setCache: function(on){ cacheOn = !!on; },
     _setNow: function(ms){ offset = ms - Date.now(); },
     _db: function(){ return db; },
     _empty: function(){ return !db.tables["名簿"] || db.tables["名簿"].length === 0; }

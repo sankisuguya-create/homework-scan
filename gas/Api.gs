@@ -69,7 +69,10 @@ function teacher(){
 /* ── 表を読む ─────────────────────────────── */
 /* 「名簿」シートが正本。並びは メアド,学年,組,番号,氏名（算数TAと同じ）。
    以前の 番号,氏名（＋任意でメアド）の行も読めるように両方を受ける。 */
-function readRoster(){
+function readRoster(raw){
+  return P.cachedRows("名簿", readRosterRows, raw);
+}
+function readRosterRows(){
   var out = [], seen = {};
   P.rows("名簿").forEach(function(r){
     var no, name, email = "";
@@ -84,7 +87,10 @@ function readRoster(){
   });
   return out.sort(function(a, b){ return a.no - b.no; });
 }
-function readSlots(){
+function readSlots(raw){
+  return P.cachedRows("品目", readSlotsRows, raw);
+}
+function readSlotsRows(){
   var bySlot = {};
   P.rows("品目").forEach(function(r){
     var s = Domain.toInt(r[0]);
@@ -99,7 +105,10 @@ function readSlots(){
     out.push(bySlot[s] || {slot:s, name:"", icon:ICONS[s - 1], daily:false, color:""});
   return out;
 }
-function readDays(){
+function readDays(raw){
+  return P.cachedRows("日の品目", readDaysRows, raw);
+}
+function readDaysRows(){
   var days = {};
   P.rows("日の品目").forEach(function(r){
     var d = Domain.asDate(r[0]), s = Domain.toInt(r[1]);
@@ -170,13 +179,19 @@ function readAbsences(){
   return P.rows("欠席").map(function(r){ return {date:Domain.asDate(r[0]), no:Domain.toInt(r[1])}; })
     .filter(function(a){ return a.date && a.no; });
 }
-function readExemptions(){
+function readExemptions(raw){
+  return P.cachedRows("免除", readExemptionRows, raw);
+}
+function readExemptionRows(){
   return P.rows("免除").map(function(r){
     return {from:Domain.asDate(r[0]), to:Domain.asDate(r[1]), no:Domain.toInt(r[2]),
             slot:Domain.toInt(r[3]) || 0, memo:String(r[4] || "")};
   }).filter(function(x){ return x.no; });
 }
-function readSettings(){
+function readSettings(raw){
+  return P.cachedRows("設定", readSettingRows, raw);
+}
+function readSettingRows(){
   var kv = {};
   P.rows("設定").forEach(function(r){ kv[String(r[0]).trim()] = String(r[1] == null ? "" : r[1]).trim(); });
   var rate = Number(kv["提出率の目安（%）"]), streak = Number(kv["続けて出ていない日の目安"]);
@@ -200,8 +215,8 @@ function dailyItems(slots){
   return slots.filter(function(s){ return s.daily && s.name; })
               .map(function(s){ return {slot:s.slot, name:s.name}; });
 }
-function itemsFor(date, days, slots){
-  days = days || readDays(); slots = slots || readSlots();
+function itemsFor(date, days, slots, raw){
+  days = days || readDays(raw); slots = slots || readSlots(raw);
   var list = days[date], draft = !list;
   if(draft) list = dailyItems(slots);
   var meta = {};
@@ -232,7 +247,7 @@ function helperState(ctx){
   var events = ctx.events || readEvents(date, date);
   var absences = ctx.absences || readAbsences();
   var dv = Domain.dayView({date:date, items:items, roster:roster, events:events,
-                          absences:absences, exemptions:readExemptions()});
+                          absences:absences, exemptions:ctx.exemptions || readExemptions()});
   var st = ctx.settings || readSettings();
   return {v:API_VER, date:date, wd:Domain.weekday(date), items:items,
           roster: roster.map(function(s){ return {no:s.no, name: st.showNames ? s.name : ""}; }),
@@ -371,18 +386,19 @@ function log(kind, detail, email){
 }
 
 /* ── 先生の画面 ───────────────────────────── */
+/* 先生の画面と設定系は、いじった直後の新しい値を見せるため常に直読み（raw） */
 function apiTeacherDay(date){
   teacher();
   var d0 = today();
   date = Domain.asDate(date) || d0;
-  var f = itemsFor(date);
+  var f = itemsFor(date, null, null, true);
   var items = f.draft && date !== d0 ? [] : f.items;
-  var roster = readRoster(), absences = readAbsences();
+  var roster = readRoster(1), absences = readAbsences();
   var cells = Domain.dayDetail({date:date, items:items, roster:roster,
                                 events:readEvents(date, date),
-                                absences:absences, exemptions:readExemptions()});
+                                absences:absences, exemptions:readExemptions(1)});
   return {v:API_VER, date:date, wd:Domain.weekday(date), today:d0, hasDay: !f.draft,
-          items:items, slots:readSlots(), roster:roster, cells:cells,
+          items:items, slots:readSlots(1), roster:roster, cells:cells,
           absent: absences.filter(function(a){ return a.date === date; }).map(function(a){ return a.no; })};
 }
 function apiSaveDay(date, items){
@@ -419,7 +435,10 @@ function apiSetAbsent(date, nos){
 }
 /* 係の画面を開ける児童。いつまでは学期末（3/31・8/31・12/31）が上限。
    空のまま保存すると学期末の日付が入る（Gate.who と同じ決まり） */
-function readHelpers(){
+function readHelpers(raw){
+  return P.cachedRows("係", readHelperRows, raw);
+}
+function readHelperRows(){
   var t = today();
   return P.rows("係").map(function(r){
     var e = Gate.norm(r[0]);
@@ -430,9 +449,9 @@ function readHelpers(){
 }
 function apiSetup(){
   teacher();
-  return {v:API_VER, roster:readRoster(), slots:readSlots(), exemptions:readExemptions(),
-          helpers:readHelpers(),
-          settings:readSettings(), icons:ICONS, sheetUrl:P.sheetUrl(), today:today()};
+  return {v:API_VER, roster:readRoster(1), slots:readSlots(1), exemptions:readExemptions(1),
+          helpers:readHelpers(1),
+          settings:readSettings(1), icons:ICONS, sheetUrl:P.sheetUrl(), today:today()};
 }
 
 function apiSaveSlots(slots){
@@ -511,10 +530,10 @@ function apiSaveSettings(s){
 /* 分析。既定は「集計の開始日」から、きのうまで（きょうはまだ途中なので入れない） */
 function apiStats(from, to, item){
   teacher();
-  var st = readSettings(), d0 = today();
+  var st = readSettings(1), d0 = today();
   from = Domain.asDate(from) || st.from || "";
   to = Domain.asDate(to) || Domain.addDays(d0, -1);
-  var days = readDays(), availableItems = [];
+  var days = readDays(1), availableItems = [];
   Object.keys(days).sort().forEach(function(d){
     if(d < from || d > to) return;
     days[d].forEach(function(it){
@@ -523,8 +542,8 @@ function apiStats(from, to, item){
   });
   /* 画面の初回は null で最初の品目を選ぶ。旧呼び出しと空文字は全品目。 */
   item = item === null ? (availableItems[0] || "") : String(item || "");
-  var r = Domain.stats({days:days, roster:readRoster(), events:readEvents(from, to), item:item,
-                        absences:readAbsences(), exemptions:readExemptions(),
+  var r = Domain.stats({days:days, roster:readRoster(1), events:readEvents(from, to), item:item,
+                        absences:readAbsences(), exemptions:readExemptions(1),
                         from:from, to:to, rateMin: st.ratePct / 100, streakMin: st.streakMin});
   r.from = from; r.to = to;
   r.item = item; r.availableItems = availableItems; r.v = API_VER;
