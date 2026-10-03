@@ -32,12 +32,33 @@ var P = (function(){
     return out;
   }
 
+  /* Platform.gs の呼び出し内メモの鏡。_setMemo(false) で止めて、
+     メモ経路の応答が非経路と一致することを検査できるようにする */
+  var memo = {data:{}}, memoOn = true;
+  function rmemo(n, w){
+    var k = n + "|" + w;
+    if(memoOn && memo.data[k]) return memo.data[k];
+    var r = table(n).map(function(row){ return row.slice(0, w); });
+    if(memoOn) memo.data[k] = r;
+    return r;
+  }
+  /* 書き込み後は db が正本なので、メモ済みの幅ごとの口を db で引き直す */
+  function memoPull(n){
+    if(!memoOn) return;
+    Object.keys(memo.data).forEach(function(k){
+      if(k.indexOf(n + "|") !== 0) return;
+      var w = Number(k.slice(n.length + 1)), arr = memo.data[k], t = table(n);
+      arr.length = 0;
+      for(var i = 0; i < t.length; i++) arr.push(t[i].slice(0, w));
+    });
+  }
+
   var api = {
-    rows: function(n){ return copy(table(n)); },
+    rows: function(n){ return rmemo(n, TABLES[n].length); },
     tail: function(n, c){ var t = table(n); return copy(t.slice(Math.max(0, t.length - c))); },
-    append: function(n, list){ var t = table(n); list.forEach(function(r){ t.push(norm(n, r)); }); save(); },
-    replace: function(n, list){ db.tables[n] = list.map(function(r){ return norm(n, r); }); save(); },
-    put: function(n, i, r){ db.tables[n][i] = norm(n, r); save(); },
+    append: function(n, list){ var t = table(n); list.forEach(function(r){ t.push(norm(n, r)); }); save(); memoPull(n); },
+    replace: function(n, list){ db.tables[n] = list.map(function(r){ return norm(n, r); }); save(); memoPull(n); },
+    put: function(n, i, r){ db.tables[n][i] = norm(n, r); save(); memoPull(n); },
     prop: function(k){ return db.props[k] == null ? null : db.props[k]; },
     setProp: function(k, v){ db.props[k] = String(v); save(); },
     cacheGet: function(k){
@@ -67,7 +88,8 @@ var P = (function(){
     who: function(){ return Gate.checkAny(); },
 
     /* 検査とデモのための口。本物の Platform.gs には無い */
-    _reset: function(){ db = fresh(); save(); },
+    _reset: function(){ db = fresh(); memo.data = {}; memoOn = true; save(); },
+    _setMemo: function(on){ memoOn = !!on; if(!memoOn) memo.data = {}; },
     _setNow: function(ms){ offset = ms - Date.now(); },
     _db: function(){ return db; },
     _empty: function(){ return !db.tables["名簿"] || db.tables["名簿"].length === 0; }

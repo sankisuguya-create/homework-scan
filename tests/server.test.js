@@ -160,6 +160,23 @@ console.log("■ 版ずれ検知（API_VER）と応答の棚卸し");
   ok("設定の応答に未使用の url は無い", s.apiSetup().url === undefined);
 }
 
+console.log("■ 呼び出し内メモ（A2）");
+{
+  const a = fresh(), b = fresh();
+  b.P._setMemo(false);
+  /* 同じ下ごしらえで、メモ経路と非経路の api 応答が一致する */
+  const sa = a.apiToday(), sb = b.apiToday();
+  ok("apiToday が一致", JSON.stringify(sa) === JSON.stringify(sb));
+  ok("apiTeacherDay が一致", JSON.stringify(a.apiTeacherDay("")) === JSON.stringify(b.apiTeacherDay("")));
+  ok("apiSetup が一致", JSON.stringify(a.apiSetup()) === JSON.stringify(b.apiSetup()));
+  ok("apiStats が一致", JSON.stringify(a.apiStats()) === JSON.stringify(b.apiStats()));
+  /* 書き込み直後の同じ呼び出しでの再読もメモ同期で正しい */
+  const e = {id:"m-000001", date:sa.date, no:1, slot:1, op:"on", at:JST(sa.date, "08:10"), via:"tap"};
+  a.apiMark([e]); b.apiMark([e]);
+  ok("書き込み後の apiToday.cells が一致",
+    JSON.stringify(a.apiToday().cells) === JSON.stringify(b.apiToday().cells));
+}
+
 console.log("■ 先生が品目・名簿・過去の日を直す");
 {
   const s = fresh();

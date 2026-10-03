@@ -9,11 +9,31 @@ var P = (function(){
 
   function book(){ return SpreadsheetApp.getActive(); }
 
+  /* ── 呼び出し内メモ ────────────────────────────
+     google.script.run の1回は GAS の1実行なので、このオブジェクトのメモは
+     その api 呼び出しの中だけで効く（TTL も他端末の影響も持たない、鮮度リスクゼロ）。
+     sheet() の解決と rows() の内容を覚え、書き込み系はメモ内データも同時に直す
+     ——書いた直後の同じ呼び出しでの再読も RPC なしで済む。 */
+  var memo = {sheet:{}, data:{}};
+  function mkey(name, w){ return name + "|" + w; }
+  function normRow(row, w){
+    var out = [];
+    for(var i = 0; i < w; i++) out.push(row[i] == null ? "" : String(row[i]));
+    return out;
+  }
+  /* name のメモ済み行データ（幅ごとに別口）を、書き込んだ内容に合わせて直す */
+  function memoSync(name, fn){
+    Object.keys(memo.data).forEach(function(k){
+      if(k.indexOf(name + "|") === 0) fn(memo.data[k], Number(k.slice(name.length + 1)));
+    });
+  }
+
   /* シートが無ければ見出し付きで作る。列は文字として持つ（日付の自動変換を止める）。
      スキーマより狭い既存のシートは、列を足して見出しを書き直す（＝表の定義を変えたときの移行） */
   function sheet(name){
     var head = TABLES[name];
     if(!head) throw new Error("知らない表: " + name);
+    if(memo.sheet[name]) return memo.sheet[name];
     var ss = book(), sh = ss.getSheetByName(name);
     if(!sh){
       sh = ss.insertSheet(name);
@@ -28,15 +48,19 @@ var P = (function(){
         sh.getRange(1, 1, 1, head.length).setValues([head]).setFontWeight("bold");
       }
     }
+    memo.sheet[name] = sh;
     return sh;
   }
 
   function width(name){ return TABLES[name].length; }
 
   function rows(name){
+    var k = mkey(name, width(name));
+    if(memo.data[k]) return memo.data[k];
     var sh = sheet(name), n = sh.getLastRow() - 1;
-    if(n < 1) return [];
-    return sh.getRange(2, 1, n, width(name)).getValues();
+    var r = n < 1 ? [] : sh.getRange(2, 1, n, width(name)).getValues();
+    memo.data[k] = r;
+    return r;
   }
   function tail(name, count){
     var sh = sheet(name), last = sh.getLastRow(), n = Math.min(count, last - 1);
@@ -49,23 +73,23 @@ var P = (function(){
     var r = sh.getLastRow() + 1;
     var rng = sh.getRange(r, 1, list.length, w);
     rng.setNumberFormat("@");
-    rng.setValues(list.map(function(row){
-      var out = [];
-      for(var i = 0; i < w; i++) out.push(row[i] == null ? "" : String(row[i]));
-      return out;
-    }));
+    rng.setValues(list.map(function(row){ return normRow(row, w); }));
+    memoSync(name, function(arr, w){
+      for(var i = 0; i < list.length; i++) arr.push(normRow(list[i], w));
+    });
   }
   /* データ行 i（0 起き＝シートの i+2 行目）をまるごと書きかえる */
   function put(name, i, row){
-    var sh = sheet(name), w = width(name), out = [];
-    for(var k = 0; k < w; k++) out.push(row[k] == null ? "" : String(row[k]));
+    var sh = sheet(name), w = width(name), out = normRow(row, w);
     var rng = sh.getRange(i + 2, 1, 1, w);
     rng.setNumberFormat("@");
     rng.setValues([out]);
+    memoSync(name, function(arr, w){ arr[i] = normRow(row, w); });
   }
   function replace(name, list){
     var sh = sheet(name), w = width(name), last = sh.getLastRow();
     if(last > 1) sh.getRange(2, 1, last - 1, w).clearContent();
+    memoSync(name, function(arr){ arr.length = 0; });
     append(name, list);
   }
 
