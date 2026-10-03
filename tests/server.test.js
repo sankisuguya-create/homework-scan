@@ -223,6 +223,18 @@ console.log("■ 小表のキャッシュ（P1）");
     a.apiTeacherDay("2026-09-26").items.length === 1);
 }
 
+console.log("■ 先生のマス直しは1往復（apiMark の day 応答）");
+{
+  const s = fresh();
+  const d0 = s.apiToday().date;
+  const past = s.Domain.addDays(d0, -2);
+  s.apiSaveDay(past, [{slot:1, name:"漢字"}, {slot:2, name:"計算"}]);
+  const r = s.apiMark([{id:"t-900001", date:past, no:2, slot:2, op:"forgot", at:JST(past, "08:30"), via:"teacher"}]);
+  ok("apiMark が直した日の表を返す", r.day && r.day.date === past, r.day && r.day.date);
+  ok("直した印が表に入っている", r.day.cells["2:2"].state === "forgot", r.day.cells["2:2"]);
+  ok("apiTeacherDay と同じ内容", JSON.stringify(r.day) === JSON.stringify(s.apiTeacherDay(past)));
+}
+
 console.log("■ 先生が品目・名簿・過去の日を直す");
 {
   const s = fresh();

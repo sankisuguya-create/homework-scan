@@ -292,7 +292,7 @@ function apiMark(events, sentAt){
   var rosterList = readRoster(), roster = {};
   rosterList.forEach(function(s){ roster[s.no] = true; });
   var slots = readSlots(), settings = readSettings();
-  var days = null, absRows = [], events = [];
+  var days = null, absRows = [], events = [], markDate = null, dayEvents = null;
   P.lock(function(){
     days = readDays();
     /* 「記録」は日付・番号の2列だけ読んで行番号の地図を作り、
@@ -319,6 +319,7 @@ function apiMark(events, sentAt){
       if(date !== date0 && !isTeacher) return;
       var no = Domain.toInt(e.no), slot = Domain.toInt(e.slot);
       if(!roster[no]) return;
+      if(!markDate) markDate = date;   /* 受理した記録の日（先生への day 応答に使う） */
       /* 休みの切替：{abs:true}=休み、{abs:false}=出席に戻す（児童の名前セルのタップ）
          書き換えるのは「欠席」シートだけ。マスの記録は残るので、戻すと元どおり見える */
       if(e.abs === true || e.abs === false){
@@ -372,12 +373,27 @@ function apiMark(events, sentAt){
       if(r && Domain.asDate(r[0]) === date0) evEnt.push({i:Number(k), row:r});
     });
     events = eventsOf(evEnt);
+    /* 先生が直した日の events も同じ行から作る（きょうなら使い回す） */
+    if(markDate){
+      dayEvents = markDate === date0 ? events : eventsOf(
+        Object.keys(recs).map(Number).filter(function(i){
+          return recs[i] && Domain.asDate(recs[i][0]) === markDate;
+        }).map(function(i){ return {i:i, row:recs[i]}; }));
+    }
   });
-  return {v:API_VER, processed:processed,
-          state:helperState({days:days, slots:slots, roster:rosterList, settings:settings, events:events,
-                             absences:absRows.map(function(r){
-                               return {date:Domain.asDate(r[0]), no:Domain.toInt(r[1])};
-                             }).filter(function(a){ return a.date && a.no; })})};
+  var absList = absRows.map(function(r){
+    return {date:Domain.asDate(r[0]), no:Domain.toInt(r[1])};
+  }).filter(function(a){ return a.date && a.no; });
+  var out = {v:API_VER, processed:processed,
+             state:helperState({days:days, slots:slots, roster:rosterList, settings:settings,
+                                events:events, absences:absList})};
+  /* 先生が「今日の表」から直したときは、直した日の表も一緒に返す
+     （返さないと先生側は apiTeacherDay をもう1往復していた） */
+  if(isTeacher && markDate)
+    out.day = teacherDay(markDate, {days:days, slots:slots, roster:rosterList,
+                                    events:dayEvents, absences:absList,
+                                    exemptions:readExemptions()});
+  return out;
 }
 
 function log(kind, detail, email){
@@ -386,20 +402,25 @@ function log(kind, detail, email){
 }
 
 /* ── 先生の画面 ───────────────────────────── */
-/* 先生の画面と設定系は、いじった直後の新しい値を見せるため常に直読み（raw） */
+/* 先生の画面と設定系は、いじった直後の新しい値を見せるため常に直読み（raw）。
+   ctx に読み込み済みの表を渡すと、読み直さない（apiMark から） */
+function teacherDay(date, ctx){
+  ctx = ctx || {};
+  var d0 = today();
+  var days = ctx.days || readDays(1), slots = ctx.slots || readSlots(1);
+  var f = itemsFor(date, days, slots);
+  var items = f.draft && date !== d0 ? [] : f.items;
+  var roster = ctx.roster || readRoster(1), absences = ctx.absences || readAbsences();
+  var cells = Domain.dayDetail({date:date, items:items, roster:roster,
+                                events:ctx.events || readEvents(date, date),
+                                absences:absences, exemptions:ctx.exemptions || readExemptions(1)});
+  return {v:API_VER, date:date, wd:Domain.weekday(date), today:d0, hasDay: !f.draft,
+          items:items, slots:slots, roster:roster, cells:cells,
+          absent: absences.filter(function(a){ return a.date === date; }).map(function(a){ return a.no; })};
+}
 function apiTeacherDay(date){
   teacher();
-  var d0 = today();
-  date = Domain.asDate(date) || d0;
-  var f = itemsFor(date, null, null, true);
-  var items = f.draft && date !== d0 ? [] : f.items;
-  var roster = readRoster(1), absences = readAbsences();
-  var cells = Domain.dayDetail({date:date, items:items, roster:roster,
-                                events:readEvents(date, date),
-                                absences:absences, exemptions:readExemptions(1)});
-  return {v:API_VER, date:date, wd:Domain.weekday(date), today:d0, hasDay: !f.draft,
-          items:items, slots:readSlots(1), roster:roster, cells:cells,
-          absent: absences.filter(function(a){ return a.date === date; }).map(function(a){ return a.no; })};
+  return teacherDay(Domain.asDate(date) || today());
 }
 function apiSaveDay(date, items){
   teacher();

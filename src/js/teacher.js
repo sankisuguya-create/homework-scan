@@ -46,7 +46,7 @@ var Teacher = (function(){
 
   function show(){
     if(!active) return;
-    if(tab === "home") return (H1 && H2) ? frame(homeHtml()) : loadHome();
+    if(tab === "home"){ if(!(H1 && H2)) return loadHome(); frame(homeHtml()); return homeArm(); }
     if(tab === "day") return D ? frame(dayHtml()) : loadDay(date);
     if(tab === "stats") return ST ? frame(statsHtml()) : loadStats();
     if(tab === "student") return SD ? frame(studentHtml()) : loadStudents();
@@ -54,6 +54,25 @@ var Teacher = (function(){
     if(tab === "exempt") return frame(exemptHtml());
     if(tab === "roster") return frame(rosterHtml());
     if(tab === "settings") return frame(settingsHtml());
+  }
+
+  /* ホームの「今日の未提出」は25秒ごとに静かに取り直す。
+     home タブを開いていて、今日の欄があるときだけ動く（他タブの編集を邪魔しない） */
+  var homeT = null;
+  function homeArm(){
+    clearTimeout(homeT);
+    if(active && tab === "home" && H1 && H2 && H1.date === H1.today && !document.hidden)
+      homeT = setTimeout(homeTick, 25000);
+  }
+  function homeTick(){
+    if(!active || tab !== "home" || !H1 || !H2 || H1.date !== H1.today || document.hidden) return;
+    call("apiTeacherDay", "").then(function(r){
+      if(active && tab === "home"){
+        H1 = r;
+        var el = $("#missing", root);
+        if(el) el.innerHTML = missingHtml();
+      }
+    }).catch(function(){}).then(function(){ homeArm(); });
   }
   function loadDay(d){
     loading();
@@ -93,7 +112,7 @@ var Teacher = (function(){
     var l2 = H2.date === Domain.addDays(H1.today, 1) ? "明日" : "次の登校日";
     return '<div class="twins">' + dayPane(H1, "today", l1) + dayPane(H2, "tomorrow", l2) + '</div>'
       + '<div class="sec"><h2>' + icon("users") + '今日の未提出</h2>'
-      + (H1.date === H1.today ? missingHtml()
+      + (H1.date === H1.today ? '<div id="missing">' + missingHtml() + '</div>'
          : '<div class="empty-msg">今日は休みです（' + esc(dateLabel(H1.today, Domain.weekday(H1.today))) + '）。</div>')
       + '</div>'
       + '<div class="line"><button class="btn" data-t="home-re">' + icon("sync") + '現在の状態に更新</button></div>';
@@ -239,8 +258,17 @@ var Teacher = (function(){
               op: next || "off", at:Date.now(), via:"teacher"};
     D.cells[k] = {state:next, via:"teacher", at:"", exempt:false};
     show();
-    tcall("apiMark", [ev], Date.now()).then(function(){ ST = null; return tcall("apiTeacherDay", D.date); })
-      .then(function(r){ D = r; if(tab === "day") show(); }, function(){ loadDay(D.date); });
+    /* apiMark が直した日の表（day）を返すので、ここでは再取得しない（1往復で済む） */
+    tcall("apiMark", [ev], Date.now()).then(function(r){
+      ST = null;
+      if(r && r.day){
+        D = r.day;
+        if(H1 && D.date === H1.date) H1 = r.day;   /* ホームの未提出も新しい表に */
+        if(tab === "day") show();
+      }else{
+        return tcall("apiTeacherDay", D.date).then(function(r2){ D = r2; if(tab === "day") show(); });
+      }
+    }, function(){ loadDay(D.date); });
   }
 
   /* ────────── 分析 ────────── */
@@ -661,14 +689,19 @@ var Teacher = (function(){
   }
   document.addEventListener("click", onClick);
   document.addEventListener("change", onChange);
+  /* 画面が見えている間に戻ったら、ホームの未提出をすぐ取り直す */
+  document.addEventListener("visibilitychange", function(){
+    if(active && !document.hidden && tab === "home") homeTick();
+  });
 
   function mount(el, o){
     root = el; opts = o || {}; active = true;
     tab = "home"; D = SU = ST = SD = null; sdNo = null; H1 = H2 = null; logs = null; date = "";
+    clearTimeout(homeT);
     try{ bgTheme = localStorage.getItem("hs-bg") || "grad"; }catch(ignored){ bgTheme = "grad"; }
     show();
   }
-  function unmount(){ active = false; }
+  function unmount(){ active = false; clearTimeout(homeT); }
 
   return {mount:mount, unmount:unmount, back:back};
 })();
