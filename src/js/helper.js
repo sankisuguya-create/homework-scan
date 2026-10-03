@@ -398,8 +398,12 @@ var Helper = (function(){
       var panes = [];
       var named = S.roster.some(function(r){ return r.name; });
       var disp = dispMap();
-      /* 元の名前列（1.8fr）の幅を半分にし、空いた幅を提出物へ配分する。
-         名前列はさらに「番号（左寄せ・2桁分の固定幅）＋名前（中央）」の2列に分ける（合計の幅は変えない） */
+      /* 名前列の決まり（確定済み。変えない）:
+         ・児童を ⌈人数÷3⌉ 行の3列に均等に分ける（rows×3列 ≥ 児童数）
+         ・行は「番号＋名前」の2セル（境目の線なし）。番号・名前どちらを押しても休み切替
+         ・名前は苗字のみ（同姓は苗字＋名前の頭文字）。fitWho が列ごとに字の大きさを合わせる
+         デモ版の #selfcheck が3列・行容量・集計チップを機械で確かめる（src/js/selfcheck.js）
+         元の名前列（1.8fr）の幅を半分にし、空いた幅を提出物へ配分する */
       var nameFr = .9 * S.items.length / (S.items.length + .9);
       var cols = "22px minmax(36px," + nameFr + "fr) repeat(" + S.items.length + ",minmax(0,1fr))";
       var rows = Math.ceil(roster.length / 3);

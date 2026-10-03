@@ -1582,6 +1582,70 @@ var google = {script: {run: (function(){
 })()}};
 </script>
 <script>
+/* デモ版だけに入る自己計測（#selfcheck を付けて開くと動く）。
+   画面の決まりを機械が確かめる。人間向けの決まりは src/ 側のコメントが正本
+   （GAS に持って行かないので helper/teacher のソースに書き、ここは機械検査だけ）。
+
+   計るもの（確定済みの不変条件）
+     係の画面 … ・名前列は3列（.pane が3つ）
+                ・3列の行容量（列ごとの行 × 3）≥ 児童数
+                ・集計チップの「まだ ○人」は児童数を超えない
+     先生の画面 … 文書高 ≤ 画面高（768p級でスクロール不要の一画面）
+
+   約0.7秒ごとに DOM を見て、計測値が前回と同じなら何も出さない。
+   守られていれば console.log、破れていたら console.assert（赤い行）。 */
+(function(){
+  if(!/selfcheck/.test(location.hash)) return;
+  var last = "";
+  function kids(){
+    return document.querySelectorAll(".pane .row:not(.head):not(.empty)").length;
+  }
+  function measure(){
+    var el, sig = "", okAll = true;
+    /* 係の画面は閉室中・読み込み中は格子が出ていないので、その間は計らない */
+    if(document.querySelector(".helper .panes")){
+      var panes = document.querySelectorAll(".pane"), n = kids();
+      var rowsEach = panes[0] ? panes[0].querySelectorAll(".row").length - 1 : 0;
+      var cap = rowsEach * panes.length;
+      if(panes.length !== 3){
+        okAll = false;
+        console.assert(false, "selfcheck: 係の名前列は3列の決まり → .pane が " + panes.length + " つ");
+      }
+      if(cap < n){
+        okAll = false;
+        console.assert(false, "selfcheck: 3列の行容量 " + cap + " が児童数 " + n + " 未満");
+      }
+      var bad = [];
+      document.querySelectorAll(".chip .left").forEach(function(e){
+        var x = parseInt(String(e.textContent).replace(/[^\d]/g, ""), 10) || 0;
+        if(x > n) bad.push(x);
+      });
+      if(bad.length){
+        okAll = false;
+        console.assert(false, "selfcheck: 「まだ ○人」が児童数 " + n + " を超える（" + bad.join(", ") + "）");
+      }
+      sig = "helper|panes=" + panes.length + "|rows=" + rowsEach + "|cap=" + cap + "|kids=" + n + "|bad=" + bad.join("+");
+    }else if(document.querySelector(".teacher")){
+      var doc = document.documentElement;
+      var over = doc.scrollHeight - window.innerHeight;
+      if(over > 0){
+        okAll = false;
+        console.assert(false, "selfcheck: 先生の文書高 " + doc.scrollHeight + " が画面高 " + window.innerHeight + " を " + over + "px 超過（一画面の決まり違反）");
+      }
+      var tab = (document.querySelector(".tabs [aria-selected='true']") || {}).textContent || "?";
+      sig = "teacher|tab=" + tab + "|h=" + doc.scrollHeight + "|inner=" + window.innerHeight;
+    }else{
+      return;
+    }
+    if(sig !== last){
+      last = sig;
+      console.log("[selfcheck] " + sig + (okAll ? " … OK" : " … NG"));
+    }
+  }
+  setInterval(measure, 700);
+})();
+</script>
+<script>
 /* アイコン。24×24 の線画を1ファイルに持つ（外部の配信には頼らない）。
    線は太く（2.4）、角は丸く。色は currentColor なので、置いた場所の文字色になる。 */
 var ICON_PATHS = {
@@ -2120,8 +2184,12 @@ var Helper = (function(){
       var panes = [];
       var named = S.roster.some(function(r){ return r.name; });
       var disp = dispMap();
-      /* 元の名前列（1.8fr）の幅を半分にし、空いた幅を提出物へ配分する。
-         名前列はさらに「番号（左寄せ・2桁分の固定幅）＋名前（中央）」の2列に分ける（合計の幅は変えない） */
+      /* 名前列の決まり（確定済み。変えない）:
+         ・児童を ⌈人数÷3⌉ 行の3列に均等に分ける（rows×3列 ≥ 児童数）
+         ・行は「番号＋名前」の2セル（境目の線なし）。番号・名前どちらを押しても休み切替
+         ・名前は苗字のみ（同姓は苗字＋名前の頭文字）。fitWho が列ごとに字の大きさを合わせる
+         デモ版の #selfcheck が3列・行容量・集計チップを機械で確かめる（src/js/selfcheck.js）
+         元の名前列（1.8fr）の幅を半分にし、空いた幅を提出物へ配分する */
       var nameFr = .9 * S.items.length / (S.items.length + .9);
       var cols = "22px minmax(36px," + nameFr + "fr) repeat(" + S.items.length + ",minmax(0,1fr))";
       var rows = Math.ceil(roster.length / 3);
@@ -2220,6 +2288,10 @@ var Teacher = (function(){
 
   function back(){ if(opts.back) opts.back(); }
 
+  /* 先生の画面の決まり（確定済み。変えない）:
+     ・768p級の画面ではスクロール不要の一画面（文書高 ≤ innerHeight。
+       デモ版の #selfcheck が src/js/selfcheck.js で機械計測する）
+     ・児童の詳細カードは印刷が常用（1人/全員分。帯と表は app.css の print 用） */
   function frame(body){
     var t = TABS.map(function(x){
       return '<button class="tab" role="tab" data-tab="' + x[0] + '" aria-selected="' + (tab === x[0]) + '">'
@@ -2752,7 +2824,7 @@ var Teacher = (function(){
       + '<label class="field">集計の開始日<input type="date" id="se-from" value="' + esc(s.from) + '"></label></div></div>';
     h += '<div class="sec"><h2>' + icon("shield") + '係の画面を開けるネットワーク</h2>'
       + '<div class="line"><label class="field">校内の IP<input id="se-net" value="' + esc(s.netIps || "") + '" placeholder="例 203.0.113.5, 203.0.113.0/24" style="width:22em"></label></div>'
-      + '<p class="sub">空欄ならどこからでも開けます。設定すると係の画面はこの IP（edu-net）内からしか開けません。'
+      + '<p class="note">空欄ならどこからでも開けます。設定すると係の画面はこの IP（edu-net）内からしか開けません。'
       + 'カンマで複数指定でき、範囲は /24 などの CIDR 表記に対応します。校内で調べた外向きの IP を入力してください</p></div>';
     h += '<div class="sec"><h2>' + icon("users") + '係の画面の氏名</h2><div class="chips">'
       + '<button class="pick" data-names="1" aria-pressed="' + s.showNames + '">表示する</button>'

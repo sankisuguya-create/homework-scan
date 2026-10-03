@@ -24,7 +24,8 @@ OUT_GAS = ROOT / "gas" / "Index.html"
 OUT_DEMO = ROOT / "dist" / "demo.html"
 
 INCLUDE = re.compile(r'^([ \t]*)/\* @include ([\w./\-]+) \*/[ \t]*$', re.M)
-DEMO_SCRIPTS = ["../gas/Api.gs", "js/mock-platform.js", "js/demo-seed.js", "js/mock-run.js"]
+DEMO_SCRIPTS = ["../gas/Api.gs", "js/mock-platform.js", "js/demo-seed.js", "js/mock-run.js",
+                "js/selfcheck.js"]
 DEMO_BOOT = ('{view: /teacher/.test(location.hash) ? "teacher" : "helper", '
              'url: "", demo: true, '
              'role: /helper/.test(location.hash) ? "helper" : "staff"}')

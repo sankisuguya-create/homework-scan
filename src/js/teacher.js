@@ -31,6 +31,10 @@ var Teacher = (function(){
 
   function back(){ if(opts.back) opts.back(); }
 
+  /* 先生の画面の決まり（確定済み。変えない）:
+     ・768p級の画面ではスクロール不要の一画面（文書高 ≤ innerHeight。
+       デモ版の #selfcheck が src/js/selfcheck.js で機械計測する）
+     ・児童の詳細カードは印刷が常用（1人/全員分。帯と表は app.css の print 用） */
   function frame(body){
     var t = TABS.map(function(x){
       return '<button class="tab" role="tab" data-tab="' + x[0] + '" aria-selected="' + (tab === x[0]) + '">'
@@ -563,7 +567,7 @@ var Teacher = (function(){
       + '<label class="field">集計の開始日<input type="date" id="se-from" value="' + esc(s.from) + '"></label></div></div>';
     h += '<div class="sec"><h2>' + icon("shield") + '係の画面を開けるネットワーク</h2>'
       + '<div class="line"><label class="field">校内の IP<input id="se-net" value="' + esc(s.netIps || "") + '" placeholder="例 203.0.113.5, 203.0.113.0/24" style="width:22em"></label></div>'
-      + '<p class="sub">空欄ならどこからでも開けます。設定すると係の画面はこの IP（edu-net）内からしか開けません。'
+      + '<p class="note">空欄ならどこからでも開けます。設定すると係の画面はこの IP（edu-net）内からしか開けません。'
       + 'カンマで複数指定でき、範囲は /24 などの CIDR 表記に対応します。校内で調べた外向きの IP を入力してください</p></div>';
     h += '<div class="sec"><h2>' + icon("users") + '係の画面の氏名</h2><div class="chips">'
       + '<button class="pick" data-names="1" aria-pressed="' + s.showNames + '">表示する</button>'
