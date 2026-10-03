@@ -1,9 +1,31 @@
 /* 共通の道具：サーバ呼び出し・文字の逃がし・音・トースト */
 
+/* 画面が期待するサーバの版。gas/Api.gs の API_VER と数を揃える。
+   デプロイはファイル一式の手貼りなので、片方だけ古いまま動き続けることがある。
+   応答の v が合わなければ、両画面に「貼り直してほしい」帯を出す */
+var WANT_VER = 1;
+var _verWarned = false;
+function verWarn(){
+  if(_verWarned) return;
+  _verWarned = true;
+  var staff = typeof BOOT !== "undefined" && BOOT.role === "staff";
+  var d = document.createElement("div");
+  d.className = "verwarn";
+  d.setAttribute("role", "alert");
+  d.innerHTML = icon("alert") + "<span>" + esc(staff
+    ? "サーバと画面のファイルの版が合っていません。Index.html と .gs の4ファイルを一式そろえて貼り直してください。"
+    : "アプリの ばんが あっていません。先生に つたえてください。") + "</span>";
+  document.body.appendChild(d);
+}
+function verCheck(r){
+  if(r && typeof r === "object" && typeof r.v === "number" && r.v !== WANT_VER) verWarn();
+}
+
 function call(name){
   var args = Array.prototype.slice.call(arguments, 1);
   return new Promise(function(resolve, reject){
-    var r = google.script.run.withSuccessHandler(resolve).withFailureHandler(reject);
+    var r = google.script.run.withSuccessHandler(function(v){ verCheck(v); resolve(v); })
+      .withFailureHandler(reject);
     r[name].apply(r, args);
   });
 }

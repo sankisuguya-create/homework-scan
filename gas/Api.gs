@@ -49,6 +49,11 @@ var VIA = {tap:"タップ", teacher:"先生"};
 var GLYPH = {on:"○", rest:"休", forgot:"忘", doing:"△", off:"消"};
 var MARK_GRACE = 10;   /* 14:00 の閉室を過ぎても、少し前に押した分を受ける幅（分） */
 
+/* サーバ側の版。画面（src/js/core.js の WANT_VER）と数を揃える。
+   デプロイは Index.html＋.gs の手貼りなので、片方だけ古い組み合わせがあり得る。
+   api の応答と boot に v で載せ、ずれていたら画面側が警告を出す */
+var API_VER = 1;
+
 function invert(o){ var r = {}; Object.keys(o).forEach(function(k){ r[o[k]] = k; }); return r; }
 var GLYPH_R = invert(GLYPH);
 
@@ -202,21 +207,21 @@ function helperState(ctx){
   var roster = ctx.roster || readRoster();
   var events = ctx.events || readEvents();
   var absences = ctx.absences || readAbsences();
-  var v = Domain.dayView({date:date, items:items, roster:roster, events:events,
+  var dv = Domain.dayView({date:date, items:items, roster:roster, events:events,
                           absences:absences, exemptions:readExemptions()});
   var st = ctx.settings || readSettings();
-  return {date:date, wd:Domain.weekday(date), items:items,
+  return {v:API_VER, date:date, wd:Domain.weekday(date), items:items,
           roster: roster.map(function(s){ return {no:s.no, name: st.showNames ? s.name : ""}; }),
-          cells:v.cells, excused:v.excused,
+          cells:dv.cells, excused:dv.excused,
           absent: absences.filter(function(a){ return a.date === date; }).map(function(a){ return a.no; }),
-          now:P.now(), net:st.netIps || ""};
+          net:st.netIps || ""};
 }
 /* 係の画面を使えるのは 8:00〜14:00（日本時間）。閉じている間は closed を返す。
    先生（staff）はいつでも見られる。端末側でも同じ時刻で閉じるので、
    オフラインでも「閉室中」にかわる。 */ 
 function apiToday(){
   var who = guard();
-  if(who.role === "helper" && !Domain.openAt(P.now())) return {closed:true};
+  if(who.role === "helper" && !Domain.openAt(P.now())) return {closed:true, v:API_VER};
   return helperState();
 }
 
@@ -241,7 +246,7 @@ function apiMark(events, sentAt){
     if(e && typeof e === "object" && /^[\w-]{6,40}$/.test(String(e.id || "")))
       processed.push(String(e.id));
   });
-  if(!isTeacher && !Domain.openAt(now, MARK_GRACE)) return {closed:true, processed:processed};
+  if(!isTeacher && !Domain.openAt(now, MARK_GRACE)) return {closed:true, v:API_VER, processed:processed};
   var skew = Number(sentAt);
   skew = isFinite(skew) && sentAt !== null && sentAt !== "" ? now - skew : 0;
   if(Math.abs(skew) > 8 * 86400000) skew = 0;
@@ -302,7 +307,7 @@ function apiMark(events, sentAt){
     P.append("記録", fresh);
     if(absDirty) P.replace("欠席", absRows);
   });
-  return {processed:processed,
+  return {v:API_VER, processed:processed,
           state:helperState({days:days, slots:slots, roster:rosterList, settings:settings,
                              absences:absRows.map(function(r){
                                return {date:Domain.asDate(r[0]), no:Domain.toInt(r[1])};
@@ -325,7 +330,7 @@ function apiTeacherDay(date){
   var cells = Domain.dayDetail({date:date, items:items, roster:roster,
                                 events:readEvents(),
                                 absences:absences, exemptions:readExemptions()});
-  return {date:date, wd:Domain.weekday(date), today:d0, hasDay: !f.draft,
+  return {v:API_VER, date:date, wd:Domain.weekday(date), today:d0, hasDay: !f.draft,
           items:items, slots:readSlots(), roster:roster, cells:cells,
           absent: absences.filter(function(a){ return a.date === date; }).map(function(a){ return a.no; })};
 }
@@ -374,9 +379,9 @@ function readHelpers(){
 }
 function apiSetup(){
   teacher();
-  return {roster:readRoster(), slots:readSlots(), exemptions:readExemptions(),
+  return {v:API_VER, roster:readRoster(), slots:readSlots(), exemptions:readExemptions(),
           helpers:readHelpers(),
-          settings:readSettings(), icons:ICONS, url:P.url(), sheetUrl:P.sheetUrl(), today:today()};
+          settings:readSettings(), icons:ICONS, sheetUrl:P.sheetUrl(), today:today()};
 }
 
 function apiSaveSlots(slots){
@@ -471,12 +476,12 @@ function apiStats(from, to, item){
                         absences:readAbsences(), exemptions:readExemptions(),
                         from:from, to:to, rateMin: st.ratePct / 100, streakMin: st.streakMin});
   r.from = from; r.to = to;
-  r.item = item; r.availableItems = availableItems;
+  r.item = item; r.availableItems = availableItems; r.v = API_VER;
   return r;
 }
 function apiLogs(){
   teacher();
-  return P.tail("操作記録", 60).reverse().map(function(r){
+  return {v:API_VER, list:P.tail("操作記録", 60).reverse().map(function(r){
     return {at:Domain.asStamp(r[0]), kind:String(r[1]), detail:String(r[2]), who:String(r[3])};
-  });
+  })};
 }

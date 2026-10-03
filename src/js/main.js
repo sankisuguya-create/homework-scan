@@ -4,6 +4,7 @@
 (function(){
   var app = document.getElementById("app");
   var staff = BOOT.role === "staff";
+  verCheck(BOOT);   /* 貼り直した Index.html と古い .gs（またはその逆）を開いたときに帯を出す */
 
   function helper(){ Teacher.unmount(); Helper.mount(app, {staff:staff, openTeacher:teacher}); }
   function teacher(){

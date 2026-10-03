@@ -218,6 +218,11 @@ textarea{border:var(--thin);border-radius:6px;padding:10px;font-size:18px;width:
 .mat .c .ic{width:26px;height:26px}
 .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--ink);color:var(--paper);padding:14px 26px;border-radius:var(--r);font-size:22px;font-weight:700;z-index:80;display:flex;gap:10px;align-items:center}
 .toast.ng{background:var(--warn);color:var(--ink)}
+/* サーバと画面の版ずれ警告（API_VER / WANT_VER）。見逃せないので上端に張り付ける */
+.verwarn{position:fixed;top:0;left:0;right:0;z-index:99;background:var(--warn);color:var(--ink);
+  display:flex;align-items:center;justify-content:center;gap:12px;padding:12px 20px;
+  font-size:24px;font-weight:800;border-bottom:var(--line);text-align:center}
+.verwarn .ic{width:32px;height:32px;flex:none}
 .empty-msg{border:3px dashed var(--ink);border-radius:var(--r);padding:20px;font-size:22px;font-weight:700}
 
 /* ================= 最初の画面（係） ================= */
@@ -814,10 +819,32 @@ function icon(name, cls){
 }
 /* 共通の道具：サーバ呼び出し・文字の逃がし・音・トースト */
 
+/* 画面が期待するサーバの版。gas/Api.gs の API_VER と数を揃える。
+   デプロイはファイル一式の手貼りなので、片方だけ古いまま動き続けることがある。
+   応答の v が合わなければ、両画面に「貼り直してほしい」帯を出す */
+var WANT_VER = 1;
+var _verWarned = false;
+function verWarn(){
+  if(_verWarned) return;
+  _verWarned = true;
+  var staff = typeof BOOT !== "undefined" && BOOT.role === "staff";
+  var d = document.createElement("div");
+  d.className = "verwarn";
+  d.setAttribute("role", "alert");
+  d.innerHTML = icon("alert") + "<span>" + esc(staff
+    ? "サーバと画面のファイルの版が合っていません。Index.html と .gs の4ファイルを一式そろえて貼り直してください。"
+    : "アプリの ばんが あっていません。先生に つたえてください。") + "</span>";
+  document.body.appendChild(d);
+}
+function verCheck(r){
+  if(r && typeof r === "object" && typeof r.v === "number" && r.v !== WANT_VER) verWarn();
+}
+
 function call(name){
   var args = Array.prototype.slice.call(arguments, 1);
   return new Promise(function(resolve, reject){
-    var r = google.script.run.withSuccessHandler(resolve).withFailureHandler(reject);
+    var r = google.script.run.withSuccessHandler(function(v){ verCheck(v); resolve(v); })
+      .withFailureHandler(reject);
     r[name].apply(r, args);
   });
 }
@@ -1924,7 +1951,7 @@ var Teacher = (function(){
                                        netIps:$("#se-net").value.trim()})
         .then(function(r){ SU = r; ST = null; show(); toast("設定を保存しました"); });
     }
-    if(t === "logs") return tcall("apiLogs").then(function(r){ logs = r; show(); });
+    if(t === "logs") return tcall("apiLogs").then(function(r){ logs = r.list; show(); });
   }
   function onChange(e){
     if(!active || !root.contains(e.target)) return;
@@ -1953,6 +1980,7 @@ var Teacher = (function(){
 (function(){
   var app = document.getElementById("app");
   var staff = BOOT.role === "staff";
+  verCheck(BOOT);   /* 貼り直した Index.html と古い .gs（またはその逆）を開いたときに帯を出す */
 
   function helper(){ Teacher.unmount(); Helper.mount(app, {staff:staff, openTeacher:teacher}); }
   function teacher(){

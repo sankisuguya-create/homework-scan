@@ -63,7 +63,6 @@ var P = (function(){
       }
       return h1.toString(16) + h2.toString(16);
     },
-    url: function(){ return ""; },
     sheetUrl: function(){ return ""; },
     who: function(){ return Gate.checkAny(); },
 

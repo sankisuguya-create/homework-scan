@@ -89,12 +89,11 @@ var P = (function(){
     var b = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, s, Utilities.Charset.UTF_8);
     return b.map(function(x){ return ((x + 256) % 256).toString(16).replace(/^(.)$/, "0$1"); }).join("");
   }
-  function url(){ try{ return ScriptApp.getService().getUrl() || ""; }catch(err){ return ""; } }
   function sheetUrl(){ try{ return book().getUrl() || ""; }catch(err){ return ""; } }
 
   return {rows:rows, tail:tail, append:append, replace:replace, put:put,
           prop:prop, setProp:setProp, cacheGet:cacheGet, cachePut:cachePut, cacheDel:cacheDel,
-          lock:lock, now:now, uuid:uuid, hash:hash, url:url, sheetUrl:sheetUrl,
+          lock:lock, now:now, uuid:uuid, hash:hash, sheetUrl:sheetUrl,
           who:function(){ return Gate.checkAny(); }};
 })();
 
@@ -116,7 +115,7 @@ function doGet(e){
   var view = (w.role === "staff" && q.view === "teacher") ? "teacher" : "helper";
   try{ log(view === "teacher" ? "先生の画面を開いた" : "係の画面を開いた", "", w.email); }catch(err){}
   var t = HtmlService.createTemplateFromFile("Index");
-  t.boot = JSON.stringify({view:view, role:w.role, url:P.url()});
+  t.boot = JSON.stringify({view:view, role:w.role, v:API_VER});
   return t.evaluate()
     .setTitle("宿題チェック")
     .addMetaTag("viewport", "width=device-width, initial-scale=1")

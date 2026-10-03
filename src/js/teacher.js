@@ -649,7 +649,7 @@ var Teacher = (function(){
                                        netIps:$("#se-net").value.trim()})
         .then(function(r){ SU = r; ST = null; show(); toast("設定を保存しました"); });
     }
-    if(t === "logs") return tcall("apiLogs").then(function(r){ logs = r; show(); });
+    if(t === "logs") return tcall("apiLogs").then(function(r){ logs = r.list; show(); });
   }
   function onChange(e){
     if(!active || !root.contains(e.target)) return;

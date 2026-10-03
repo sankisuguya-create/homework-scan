@@ -146,6 +146,20 @@ console.log("■ 係が名前をタップして休みを切り替える（apiMar
   ok("重複して欠席行が増えない", s.P.rows("欠席").filter(x => Number(x[1]) === 19).length === 1, s.P.rows("欠席"));
 }
 
+console.log("■ 版ずれ検知（API_VER）と応答の棚卸し");
+{
+  const s = fresh();
+  ok("apiToday は版番号を返す", s.apiToday().v === s.API_VER, s.apiToday().v);
+  ok("apiMark も版番号を返す", s.apiMark([]).v === s.API_VER);
+  ok("apiTeacherDay も", s.apiTeacherDay("").v === s.API_VER);
+  ok("apiSetup も", s.apiSetup().v === s.API_VER);
+  ok("apiStats も", s.apiStats().v === s.API_VER);
+  const lg = s.apiLogs();
+  ok("apiLogs は {v, list} の形", lg.v === s.API_VER && Array.isArray(lg.list), lg);
+  ok("係の応答に未使用の now は無い", s.apiToday().now === undefined);
+  ok("設定の応答に未使用の url は無い", s.apiSetup().url === undefined);
+}
+
 console.log("■ 先生が品目・名簿・過去の日を直す");
 {
   const s = fresh();
