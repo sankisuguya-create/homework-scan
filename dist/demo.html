@@ -1077,7 +1077,7 @@ function apiMark(events, sentAt){
       if(hd <= date0 && hd >= lo) want.push(hi);
     }
     var recs = P.rowsAt("記録", want), nextIdx = head.length;
-    var dirty = {}, fresh = [];
+    var dirty = {}, fresh = [], isFresh = {};
     var absDirty = false;
     absRows = P.rows("欠席");
     list.forEach(function(e){
@@ -1109,17 +1109,18 @@ function apiMark(events, sentAt){
       var at = Number(e.at) + skew;
       if(!isFinite(at) || at > now + 5 * 60000 || at < now - 8 * 86400000) at = now;
       if(date === date0) ensureDay(date, days, slots);
-      var key = date + "|" + no, idx = recIdx[key], row, added = false;
+      var key = date + "|" + no, idx = recIdx[key], row;
       if(idx == null){
         row = [date, String(no), "", "", "", "", "", "", "", "", ""];
-        idx = nextIdx++; recIdx[key] = idx; recs[idx] = row; fresh.push(idx); added = true;
+        idx = nextIdx++; recIdx[key] = idx; recs[idx] = row; fresh.push(idx); isFresh[idx] = true;
       }else{
         row = recs[idx];
       }
       var cell = recCellText(e.op, via, date === date0 ? at : null);
       if(row[1 + slot] !== cell){
         row[1 + slot] = cell;
-        if(!added) dirty[idx] = true;
+        /* この送信で足す行は append で書く。2つめ以降の記録で putRows すると行が二重になる */
+        if(!isFresh[idx]) dirty[idx] = true;
       }
     });
     /* 変わった行は連続する並びに束ねて一度に書き戻す（9マスで1 RPC） */
@@ -1282,7 +1283,7 @@ function apiSaveExemptions(list){
 function apiSaveHelpers(nos, until){
   teacher();
   var byNo = {};
-  readRoster().forEach(function(s){ if(s.email) byNo[s.no] = s; });
+  readRoster(1).forEach(function(s){ if(s.email) byNo[s.no] = s; });
   var prev = {};
   P.rows("係").forEach(function(r){
     var e = Gate.norm(r[0]);
