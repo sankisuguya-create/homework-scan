@@ -153,6 +153,16 @@ console.log("■ 係が名前をタップして休みを切り替える（apiMar
   s.apiMark([{id:"ab-000006", date:st.date, no:19, abs:true, at:JST(st.date, "08:50"), via:"tap"},
              {id:"ab-000007", date:st.date, no:19, abs:true, at:JST(st.date, "08:50"), via:"tap"}]);
   ok("重複して欠席行が増えない", s.P.rows("欠席").filter(x => Number(x[1]) === 19).length === 1, s.P.rows("欠席"));
+
+  /* rows() の返り値は呼び出し内メモそのもの。それを push/splice して replace に
+     戻すと、実機では「メモを空にしてから書き戻す」順で中身ごと消えたことがある */
+  s.P.append("欠席", [["2026-09-24", "1"], ["2026-09-23", "5"]]);
+  s.apiMark([{id:"ab-000008", date:st.date, no:2, abs:true, at:JST(st.date, "08:55"), via:"tap"}]);
+  ok("切替えても他の日の欠席が残る",
+     s.P.rows("欠席").some(x => x[0] === "2026-09-24" && Number(x[1]) === 1)
+     && s.P.rows("欠席").some(x => x[0] === "2026-09-23" && Number(x[1]) === 5),
+     s.P.rows("欠席"));
+  ok("今日の欠席も残る", s.P.rows("欠席").some(x => x[0] === st.date && Number(x[1]) === 2), s.P.rows("欠席"));
 }
 
 console.log("■ 版ずれ検知（API_VER）と応答の棚卸し");

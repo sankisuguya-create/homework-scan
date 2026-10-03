@@ -101,6 +101,10 @@ var P = (function(){
   }
   function append(name, list){
     if(!list.length) return;
+    /* rows() はメモ配列そのものを返すので、それをそのまま渡されると
+       下の memoSync が配列を足しながら自分を伸ばして止まらなくなる。
+       先に別の並びにしておく */
+    list = list.slice();
     var sh = sheet(name), w = width(name);
     var r = sh.getLastRow() + 1;
     var rng = sh.getRange(r, 1, list.length, w);
@@ -124,11 +128,14 @@ var P = (function(){
     });
   }
   function replace(name, list){
+    /* rows() の返り値（メモ配列）をそのまま渡されると、下の memoSync が
+       それを空にして append まで全部消える。先に別の並びにしておく */
+    var cp = list.slice();
     var sh = sheet(name), w = width(name), last = sh.getLastRow();
     if(last > 1) sh.getRange(2, 1, last - 1, w).clearContent();
     dropCache(name);
     memoSync(name, function(arr){ arr.length = 0; });
-    append(name, list);
+    append(name, cp);
   }
 
   function cache(){ return CacheService.getScriptCache(); }
