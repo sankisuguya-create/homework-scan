@@ -177,6 +177,35 @@ console.log("■ 呼び出し内メモ（A2）");
     JSON.stringify(a.apiToday().cells) === JSON.stringify(b.apiToday().cells));
 }
 
+console.log("■ 記録の行が日付順でなくても索引で正しい行を書き直す（A1+P2）");
+{
+  const s = fresh();
+  const d0 = s.apiToday().date;
+  const past = s.Domain.addDays(d0, -3);
+  s.apiSaveDay(past, [{slot:1, name:"漢字"}, {slot:2, name:"計算"}]);
+  /* 対象日の行が他の日の行に挟まれた配置（列がずれないかの確かめ） */
+  s.P.append("記録", [
+    [d0,   "1", "○ 8:00", "", "", "", "", "", "", "", ""],
+    [past, "2", "", "", "", "", "", "", "", "", ""],
+    [d0,   "2", "", "", "", "", "", "", "", "", ""],
+    [past, "1", "", "", "", "", "", "", "", "", ""],
+    [d0,   "3", "△", "", "", "", "", "", "", "", ""]
+  ]);
+  /* 先生が過去の日のマスを直す → 添字3の行の枠2だけが変わるはず */
+  const r = s.apiMark([{id:"t-000001", date:past, no:1, slot:2, op:"forgot", at:JST(past, "08:30"), via:"teacher"}]);
+  ok("受理された", r.processed.indexOf("t-000001") >= 0, r);
+  const rows = s.P.rows("記録");
+  ok("過去の日の行（添字3）の枠2が 忘 になる", rows[3][3] === "*忘", rows[3]);
+  ok("他の日の行は変わらない", rows[0][3] === "" && rows[2][3] === "" && rows[4][3] === "", rows);
+  ok("行数が増えない", rows.length === 5, rows.length);
+  /* 索引経由の読み取りできょうの行だけが見える */
+  const st2 = s.apiToday();
+  ok("きょうのセルが読める", st2.cells["1:1"] === "on" && st2.cells["3:1"] === "doing", st2.cells);
+  ok("過去の日の変更はきょうの表に出ない", st2.cells["1:2"] === undefined, st2.cells);
+  ok("先生の画面では過去の変更が見える", s.apiTeacherDay(past).cells["1:2"].state === "forgot",
+     s.apiTeacherDay(past).cells["1:2"]);
+}
+
 console.log("■ 先生が品目・名簿・過去の日を直す");
 {
   const s = fresh();

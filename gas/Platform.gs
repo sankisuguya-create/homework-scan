@@ -67,6 +67,37 @@ var P = (function(){
     if(n < 1) return [];
     return sh.getRange(last - n + 1, 1, n, width(name)).getValues();
   }
+  /* 先頭 n 列だけ読む（「記録」の日付索引など、行を絞るための軽いスキャン）。
+     幅ごとにメモに乗るので、同じ呼び出しで二度読まない */
+  function cols(name, n){
+    var w = width(name);
+    if(n >= w) return rows(name);
+    var k = mkey(name, n);
+    if(memo.data[k]) return memo.data[k];
+    var sh = sheet(name), last = sh.getLastRow() - 1;
+    var r = last < 1 ? [] : sh.getRange(2, 1, last, n).getValues();
+    memo.data[k] = r;
+    return r;
+  }
+  /* 指定したデータ行（0起きの添字の並び）だけ取り、{添字: 行} で返す。
+     連続する添字はひと続きの getRange に束ねる。全幅メモがあればそこから切る */
+  function rowsAt(name, idx){
+    var out = {}, w = width(name), t = memo.data[mkey(name, w)];
+    if(t){
+      idx.forEach(function(i){ out[i] = t[i] ? t[i].slice() : null; });
+      return out;
+    }
+    var ord = idx.slice().sort(function(a, b){ return a - b; }), p = 0;
+    while(p < ord.length){
+      var q = p;
+      while(q + 1 < ord.length && ord[q + 1] === ord[q] + 1) q++;
+      var n = ord[q] - ord[p] + 1;
+      var vals = sheet(name).getRange(ord[p] + 2, 1, n, w).getValues();
+      for(var j = 0; j < n; j++) out[ord[p] + j] = vals[j];
+      p = q + 1;
+    }
+    return out;
+  }
   function append(name, list){
     if(!list.length) return;
     var sh = sheet(name), w = width(name);
@@ -78,13 +109,16 @@ var P = (function(){
       for(var i = 0; i < list.length; i++) arr.push(normRow(list[i], w));
     });
   }
-  /* データ行 i（0 起き＝シートの i+2 行目）をまるごと書きかえる */
-  function put(name, i, row){
-    var sh = sheet(name), w = width(name), out = normRow(row, w);
-    var rng = sh.getRange(i + 2, 1, 1, w);
+  /* startIdx から連続するデータ行をまとめて書きかえる（1回の setValues） */
+  function putRows(name, startIdx, list){
+    if(!list.length) return;
+    var sh = sheet(name), w = width(name);
+    var rng = sh.getRange(startIdx + 2, 1, list.length, w);
     rng.setNumberFormat("@");
-    rng.setValues([out]);
-    memoSync(name, function(arr, w){ arr[i] = normRow(row, w); });
+    rng.setValues(list.map(function(row){ return normRow(row, w); }));
+    memoSync(name, function(arr, w){
+      for(var i = 0; i < list.length; i++) arr[startIdx + i] = normRow(list[i], w);
+    });
   }
   function replace(name, list){
     var sh = sheet(name), w = width(name), last = sh.getLastRow();
@@ -115,7 +149,8 @@ var P = (function(){
   }
   function sheetUrl(){ try{ return book().getUrl() || ""; }catch(err){ return ""; } }
 
-  return {rows:rows, tail:tail, append:append, replace:replace, put:put,
+  return {rows:rows, tail:tail, cols:cols, rowsAt:rowsAt,
+          append:append, replace:replace, putRows:putRows,
           prop:prop, setProp:setProp, cacheGet:cacheGet, cachePut:cachePut, cacheDel:cacheDel,
           lock:lock, now:now, uuid:uuid, hash:hash, sheetUrl:sheetUrl,
           who:function(){ return Gate.checkAny(); }};

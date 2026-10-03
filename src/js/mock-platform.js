@@ -55,10 +55,19 @@ var P = (function(){
 
   var api = {
     rows: function(n){ return rmemo(n, TABLES[n].length); },
+    cols: function(n, w){ return rmemo(n, Math.min(w, TABLES[n].length)); },
+    rowsAt: function(n, idx){
+      var t = rmemo(n, TABLES[n].length), out = {};
+      idx.forEach(function(i){ out[i] = t[i] ? t[i].slice() : null; });
+      return out;
+    },
     tail: function(n, c){ var t = table(n); return copy(t.slice(Math.max(0, t.length - c))); },
     append: function(n, list){ var t = table(n); list.forEach(function(r){ t.push(norm(n, r)); }); save(); memoPull(n); },
     replace: function(n, list){ db.tables[n] = list.map(function(r){ return norm(n, r); }); save(); memoPull(n); },
-    put: function(n, i, r){ db.tables[n][i] = norm(n, r); save(); memoPull(n); },
+    putRows: function(n, startIdx, list){
+      for(var i = 0; i < list.length; i++) db.tables[n][startIdx + i] = norm(n, list[i]);
+      save(); memoPull(n);
+    },
     prop: function(k){ return db.props[k] == null ? null : db.props[k]; },
     setProp: function(k, v){ db.props[k] = String(v); save(); },
     cacheGet: function(k){

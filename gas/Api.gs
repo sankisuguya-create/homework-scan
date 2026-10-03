@@ -125,22 +125,46 @@ function recCellText(op, via, atMs){
   if(atMs != null){ var p = Domain.jstParts(atMs); s += " " + p.h + ":" + Domain.pad(p.mi); }
   return s;
 }
-/* 「記録」の行を記録の並び（events）に直す。
+/* 「記録」を読むときは、まず日付・番号の2列だけ読んで対象の行を絞る（P.cols）。
+   from〜to に入る行の添字を集め、その行だけ P.rowsAt で取るので、
+   何年分たまっても1日分の読み込みはその日の行数に比例するだけ。
+   from/to を省くと全行が対象になる（従来どおり）。 */
+function recIndex(from, to){
+  var head = P.cols("記録", 2), out = [];
+  for(var i = 0; i < head.length; i++){
+    var d = Domain.asDate(head[i][0]);
+    if(!d) continue;
+    if((from && d < from) || (to && d > to)) continue;
+    out.push(i);
+  }
+  return out;
+}
+/* 行添字の並びを、{i: 添字, row: 行} の並びにして返す */
+function recEntries(idx){
+  var rows = P.rowsAt("記録", idx), out = [];
+  idx.forEach(function(i){ out.push({i:i, row:rows[i]}); });
+  return out;
+}
+/* {i,row} の並びを記録の並び（events）に直す。
    セル1つが記録1つ（セルは最後の状態を持つので並び替えは要らない）。 */
-function readEvents(){
+function eventsOf(entries){
   var evs = [];
-  P.rows("記録").forEach(function(r, i){
+  entries.forEach(function(en){
+    var r = en.row; if(!r) return;
     var date = Domain.asDate(r[0]), no = Domain.toInt(r[1]);
     if(!date || !no) return;
     for(var s = 1; s <= Domain.SLOTS; s++){
       var c = recCellParse(r[1 + s]);
       if(!c) continue;
-      evs.push({id:"rec-" + i + "-" + s, date:date, no:no, slot:s, op:c.op,
+      evs.push({id:"rec-" + en.i + "-" + s, date:date, no:no, slot:s, op:c.op,
                 at:c.hm == null ? "" : date + " " + Domain.hhmm(c.hm) + ":00",
-                via:c.via, seq:i});
+                via:c.via, seq:en.i});
     }
   });
   return evs;
+}
+function readEvents(from, to){
+  return eventsOf(recEntries(recIndex(from, to)));
 }
 function readAbsences(){
   return P.rows("欠席").map(function(r){ return {date:Domain.asDate(r[0]), no:Domain.toInt(r[1])}; })
@@ -205,7 +229,7 @@ function helperState(ctx){
   var days = ctx.days || readDays(), slots = ctx.slots || readSlots();
   var items = itemsFor(date, days, slots).items;
   var roster = ctx.roster || readRoster();
-  var events = ctx.events || readEvents();
+  var events = ctx.events || readEvents(date, date);
   var absences = ctx.absences || readAbsences();
   var dv = Domain.dayView({date:date, items:items, roster:roster, events:events,
                           absences:absences, exemptions:readExemptions()});
@@ -253,12 +277,21 @@ function apiMark(events, sentAt){
   var rosterList = readRoster(), roster = {};
   rosterList.forEach(function(s){ roster[s.no] = true; });
   var slots = readSlots(), settings = readSettings();
-  var days = null, absRows = [];
+  var days = null, absRows = [], events = [];
   P.lock(function(){
     days = readDays();
-    var recs = P.rows("記録");
-    var recIdx = {};
-    recs.forEach(function(r, i){ recIdx[Domain.asDate(r[0]) + "|" + Domain.toInt(r[1])] = i; });
+    /* 「記録」は日付・番号の2列だけ読んで行番号の地図を作り、
+       係が触れる範囲（きょうとその1週間前まで）の行だけ取る。
+       去年以前の行には二度と触らない */
+    var head = P.cols("記録", 2), recIdx = {}, want = [];
+    var lo = Domain.addDays(date0, -7);
+    for(var hi = 0; hi < head.length; hi++){
+      var hd = Domain.asDate(head[hi][0]);
+      if(!hd) continue;
+      recIdx[hd + "|" + Domain.toInt(head[hi][1])] = hi;
+      if(hd <= date0 && hd >= lo) want.push(hi);
+    }
+    var recs = P.rowsAt("記録", want), nextIdx = head.length;
     var dirty = {}, fresh = [];
     var absDirty = false;
     absRows = P.rows("欠席");
@@ -267,7 +300,7 @@ function apiMark(events, sentAt){
       var id = String(e.id || "");
       if(!/^[\w-]{6,40}$/.test(id)) return;
       var date = Domain.asDate(e.date);
-      if(!date || date > date0 || date < Domain.addDays(date0, -7)) return;
+      if(!date || date > date0 || date < lo) return;
       if(date !== date0 && !isTeacher) return;
       var no = Domain.toInt(e.no), slot = Domain.toInt(e.slot);
       if(!roster[no]) return;
@@ -293,7 +326,7 @@ function apiMark(events, sentAt){
       var key = date + "|" + no, idx = recIdx[key], row, added = false;
       if(idx == null){
         row = [date, String(no), "", "", "", "", "", "", "", "", ""];
-        idx = recs.push(row) - 1; recIdx[key] = idx; fresh.push(row); added = true;
+        idx = nextIdx++; recIdx[key] = idx; recs[idx] = row; fresh.push(idx); added = true;
       }else{
         row = recs[idx];
       }
@@ -303,12 +336,30 @@ function apiMark(events, sentAt){
         if(!added) dirty[idx] = true;
       }
     });
-    Object.keys(dirty).forEach(function(i){ P.put("記録", Number(i), recs[i]); });
-    P.append("記録", fresh);
+    /* 変わった行は連続する並びに束ねて一度に書き戻す（9マスで1 RPC） */
+    var di = Object.keys(dirty).map(Number).sort(function(a, b){ return a - b; });
+    var p = 0;
+    while(p < di.length){
+      var q = p;
+      while(q + 1 < di.length && di[q + 1] === di[q] + 1) q++;
+      var run = [];
+      for(var j = di[p]; j <= di[q]; j++) run.push(recs[j]);
+      P.putRows("記録", di[p], run);
+      p = q + 1;
+    }
+    P.append("記録", fresh.map(function(i){ return recs[i]; }));
     if(absDirty) P.replace("欠席", absRows);
+    /* 応答用の events はロック内で読んだ・足した行から作る（再読しない）。
+       recs には want の行と今回新しく足した行が入っている */
+    var evEnt = [];
+    Object.keys(recs).forEach(function(k){
+      var r = recs[k];
+      if(r && Domain.asDate(r[0]) === date0) evEnt.push({i:Number(k), row:r});
+    });
+    events = eventsOf(evEnt);
   });
   return {v:API_VER, processed:processed,
-          state:helperState({days:days, slots:slots, roster:rosterList, settings:settings,
+          state:helperState({days:days, slots:slots, roster:rosterList, settings:settings, events:events,
                              absences:absRows.map(function(r){
                                return {date:Domain.asDate(r[0]), no:Domain.toInt(r[1])};
                              }).filter(function(a){ return a.date && a.no; })})};
@@ -328,7 +379,7 @@ function apiTeacherDay(date){
   var items = f.draft && date !== d0 ? [] : f.items;
   var roster = readRoster(), absences = readAbsences();
   var cells = Domain.dayDetail({date:date, items:items, roster:roster,
-                                events:readEvents(),
+                                events:readEvents(date, date),
                                 absences:absences, exemptions:readExemptions()});
   return {v:API_VER, date:date, wd:Domain.weekday(date), today:d0, hasDay: !f.draft,
           items:items, slots:readSlots(), roster:roster, cells:cells,
@@ -472,7 +523,7 @@ function apiStats(from, to, item){
   });
   /* 画面の初回は null で最初の品目を選ぶ。旧呼び出しと空文字は全品目。 */
   item = item === null ? (availableItems[0] || "") : String(item || "");
-  var r = Domain.stats({days:days, roster:readRoster(), events:readEvents(), item:item,
+  var r = Domain.stats({days:days, roster:readRoster(), events:readEvents(from, to), item:item,
                         absences:readAbsences(), exemptions:readExemptions(),
                         from:from, to:to, rateMin: st.ratePct / 100, streakMin: st.streakMin});
   r.from = from; r.to = to;
