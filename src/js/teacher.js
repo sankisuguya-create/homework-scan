@@ -2,7 +2,7 @@
    先生の画面。教職員のアカウントで開いたときだけ出す（サーバも teacher() で確かめる）。
    先生しか見ないので、文言は児童向け（ひらがな多め）ではなく通常表記にする。
      今日と明日 … 最初に開く画面。今日／明日（次の登校日）の宿題を決定＋今日の未提出者
-     今日の表   … その日の提出物を決める・欠席・マスを直す（前の7日まで）
+     今日の表   … その日の提出物を決める・欠席・マスを直す（今年度の日ならいつでも）
      分析       … 提出率・平均提出時刻・連続未提出の日数
      児童       … 1人ずつの提出状況。クラス平均との比較・クラス内順位・印刷
      免除       … 特別な事情のある児童を、期間・品目ごとに外す
@@ -210,10 +210,11 @@ var Teacher = (function(){
   function dayHtml(){
     var onDay = {};
     D.items.forEach(function(it){ onDay[it.slot] = it.name; });
-    var minDate = Domain.addDays(D.today, -7);
+    var minDate = Domain.yearStart(D.today);
     var h = '<div class="sec"><div class="daynav">'
       + '<button class="btn" data-t="prev"' + (D.date <= minDate ? " disabled" : "") + '>' + icon("left") + '前の日</button>'
-      + '<div class="d">' + esc(dateLabel(D.date, D.wd)) + '</div>'
+      + '<label class="d">' + esc(dateLabel(D.date, D.wd))
+      + '<input type="date" id="day-pick" aria-label="日付を選ぶ" value="' + esc(D.date) + '" min="' + esc(minDate) + '" max="' + esc(D.today) + '"></label>'
       + '<button class="btn" data-t="next"' + (D.date >= D.today ? " disabled" : "") + '>次の日' + icon("right") + '</button>'
       + (D.date !== D.today ? '<button class="btn" data-t="today">' + icon("calendar") + '今日</button>' : '')
       + '</div></div>';
@@ -709,6 +710,11 @@ var Teacher = (function(){
     if(e.target.id === "st-sort"){ sortBy = e.target.value; show(); }
     if(e.target.id === "st-item") return loadStats($("#st-from").value, $("#st-to").value, e.target.value);
     if(e.target.id === "sd-no"){ sdNo = Number(e.target.value); show(); }
+    if(e.target.id === "day-pick"){
+      var v = e.target.value, lo = Domain.yearStart(D.today);
+      if(v && v >= lo && v <= D.today) return loadDay(v);
+      e.target.value = D.date; toast("今年度（" + lo + "〜今日）の日を選んでください", true); return;
+    }
     if(e.target.matches("[data-slot]") || e.target.matches("[data-pslot]"))
       e.target.closest(".slot").classList.toggle("on", e.target.checked);
   }

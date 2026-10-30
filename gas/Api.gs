@@ -243,7 +243,7 @@ function apiToday(){
    sentAt は端末が送った時の端末の時計。サーバの時計との差で、記録に残す時刻を直す
    （端末の時計がずれていても、押した時刻が大きくずれて残らない）。
    係が書けるのは開いている時間（8:00〜14:00＋10分の猶予）できょうの分だけ。
-   きょう以外の日を直すのは先生（教職員のアカウント）だけ。 */
+   きょう以外の日を直すのは先生（教職員のアカウント）だけで、今年度（4/1〜）の日に限る。 */
 function apiMark(events, sentAt){
   var who = guard();
   var isTeacher = who.role === "staff";
@@ -265,15 +265,16 @@ function apiMark(events, sentAt){
   P.lock(function(){
     days = readDays();
     /* 「記録」は日付・番号の2列だけ読んで行番号の地図を作り、
-       係が触れる範囲（きょうとその1週間前まで）の行だけ取る。
-       去年以前の行には二度と触らない */
+       きょうとその1週間前まで、それと先生が直す日の行だけ取る。
+       先生は今年度（4/1〜）のどの日でも直せる。前の年度の行には二度と触らない */
     var head = P.cols("記録", 2), recIdx = {}, want = [];
-    var lo = Domain.addDays(date0, -7);
+    var lo = isTeacher ? Domain.yearStart(date0) : date0, near = Domain.addDays(date0, -7), asked = {};
+    list.forEach(function(e){ var d = e && typeof e === "object" && Domain.asDate(e.date); if(d) asked[d] = true; });
     for(var hi = 0; hi < head.length; hi++){
       var hd = Domain.asDate(head[hi][0]);
       if(!hd) continue;
       recIdx[hd + "|" + Domain.toInt(head[hi][1])] = hi;
-      if(hd <= date0 && hd >= lo) want.push(hi);
+      if(hd <= date0 && hd >= lo && (hd >= near || asked[hd])) want.push(hi);
     }
     var recs = P.rowsAt("記録", want), nextIdx = head.length;
     var dirty = {}, fresh = [], isFresh = {};
