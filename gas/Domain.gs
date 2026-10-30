@@ -208,6 +208,12 @@ var Domain = (function(){
     return (y + 1) + "-03-31";
   }
 
+  /* その日を含む年度（4/1起点）の初日 */
+  function yearStart(date){
+    var y = Number(date.slice(0, 4)), m = Number(date.slice(5, 7));
+    return (m >= 4 ? y : y - 1) + "-04-01";
+  }
+
   function toInt(v){
     var s = String(v == null ? "" : v);
     if(s.normalize) s = s.normalize("NFKC");
@@ -431,7 +437,7 @@ var Domain = (function(){
     SLOTS:SLOTS, STATES:STATES, isState:isState, nextState:nextState, counts:counts,
     pad:pad, jstDate:jstDate, jstStamp:jstStamp, jstParts:jstParts,
     stampMinutes:stampMinutes, hhmm:hhmm, isDate:isDate, asDate:asDate, asStamp:asStamp,
-    addDays:addDays, weekday:weekday, toInt:toInt, termEnd:termEnd,
+    addDays:addDays, weekday:weekday, toInt:toInt, termEnd:termEnd, yearStart:yearStart,
     nextSchoolDay:nextSchoolDay, schoolDay:schoolDay,
     OPEN:OPEN, openAt:openAt, nextOpenChange:nextOpenChange,
     ip4num:ip4num, ipAllowed:ipAllowed, mean:mean, median:median,

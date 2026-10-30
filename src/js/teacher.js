@@ -2,7 +2,7 @@
    先生の画面。教職員のアカウントで開いたときだけ出す（サーバも teacher() で確かめる）。
    先生しか見ないので、文言は児童向け（ひらがな多め）ではなく通常表記にする。
      今日と明日 … 最初に開く画面。今日／明日（次の登校日）の宿題を決定＋今日の未提出者
-     今日の表   … その日の提出物を決める・欠席・マスを直す（前の7日まで）
+     今日の表   … その日の提出物を決める・欠席・マスを直す（今年度の日ならいつでも）
      分析       … 提出率・平均提出時刻・連続未提出の日数
      児童       … 1人ずつの提出状況。クラス平均との比較・クラス内順位・印刷
      免除       … 特別な事情のある児童を、期間・品目ごとに外す
@@ -94,6 +94,7 @@ var Teacher = (function(){
     }).catch(function(){}).then(function(){ homeArm(); });
   }
   function loadDay(d){
+    flushTaps();
     loading();
     return tcall("apiTeacherDay", d || "").then(function(r){ D = r; date = r.date; show(); });
   }
@@ -210,10 +211,11 @@ var Teacher = (function(){
   function dayHtml(){
     var onDay = {};
     D.items.forEach(function(it){ onDay[it.slot] = it.name; });
-    var minDate = Domain.addDays(D.today, -7);
+    var minDate = Domain.yearStart(D.today);
     var h = '<div class="sec"><div class="daynav">'
       + '<button class="btn" data-t="prev"' + (D.date <= minDate ? " disabled" : "") + '>' + icon("left") + '前の日</button>'
-      + '<div class="d">' + esc(dateLabel(D.date, D.wd)) + '</div>'
+      + '<label class="d">' + esc(dateLabel(D.date, D.wd))
+      + '<input type="date" id="day-pick" aria-label="日付を選ぶ" value="' + esc(D.date) + '" min="' + esc(minDate) + '" max="' + esc(D.today) + '"></label>'
       + '<button class="btn" data-t="next"' + (D.date >= D.today ? " disabled" : "") + '>次の日' + icon("right") + '</button>'
       + (D.date !== D.today ? '<button class="btn" data-t="today">' + icon("calendar") + '今日</button>' : '')
       + '</div></div>';
@@ -237,7 +239,9 @@ var Teacher = (function(){
       h += '<div class="empty-msg">この日は提出物がありません。</div></div>';
       return h;
     }
-    h += '<p class="note">マスを押すと 空白→○→休→忘→△→空白 と変わります（先生が修正した印として残ります）。</p>'
+    h += '<div class="line savebar"><span id="save-st" class="note">' + saveStText() + '</span>'
+      + '<button class="btn primary" data-t="save-marks"' + (tapPending.length ? '' : ' disabled') + '>' + icon("save") + '保存</button></div>'
+      + '<p class="note">マスを押すと 空白→○→休→忘→△→空白 と変わります（先生が修正した印として残ります）。押し終えて2秒たつか「保存」を押すと保存します。</p>'
       + '<div style="overflow-x:auto"><table class="tbl mat"><thead><tr><th class="num">番号</th><th>氏名</th>'
       + D.items.map(function(it){ return '<th>' + icon(D.slots[it.slot - 1].icon) + ' ' + esc(it.name) + '</th>'; }).join("")
       + '</tr></thead><tbody>' + D.roster.map(function(r){
@@ -269,7 +273,23 @@ var Teacher = (function(){
       .map(function(b){ return Number(b.getAttribute("data-abs")); });
     tcall("apiSetAbsent", D.date, nos).then(function(r){ D = r; ST = null; show(); toast("欠席を保存しました"); });
   }
-  var seq = 0, tapBusy = false, tapPending = [];
+  /* 先生のマス直しはすぐには送らない。最後のタップから2秒たつか「保存」で
+     まとめて送る（1タップごとに通信・描き直しが走るのを避ける）。
+     日・タブを移る前と画面を隠す前にも送る */
+  var seq = 0, tapBusy = false, tapPending = [], tapT = null, SAVE_WAIT = 2000;
+  function saveStText(){
+    return tapPending.length ? "未保存 " + tapPending.length + " マス（2秒後に保存）" : tapBusy ? "保存中…" : "保存済み";
+  }
+  function saveStUpdate(){
+    var el = $("#save-st", root), b = $('[data-t="save-marks"]', root);
+    if(el) el.textContent = saveStText();
+    if(b) b.disabled = !tapPending.length;
+  }
+  function flushTaps(){
+    clearTimeout(tapT); tapT = null;
+    if(!tapPending.length || tapBusy) return;
+    tapBusy = true; sendTaps(); saveStUpdate();
+  }
   function tapCell(k){
     var p = k.split(":"), c = D.cells[k] || {};
     var next = Domain.nextState(c.state || "");
@@ -281,8 +301,10 @@ var Teacher = (function(){
        通信は1本ずつ直列に流す: 連続タップを並行して投げると、サーバの処理順や
        応答の到着順が逆転して、古い表が新しい表を上書きすることがある。
        タップは溜めてまとめて送る（係側の queue/sync と同じ形） */
+    tapPending = tapPending.filter(function(x){ return !(x.date === ev.date && x.no === ev.no && x.slot === ev.slot); });
     tapPending.push(ev);
-    if(!tapBusy){ tapBusy = true; sendTaps(); }
+    saveStUpdate();
+    clearTimeout(tapT); tapT = setTimeout(flushTaps, SAVE_WAIT);
   }
   function sendTaps(){
     var list = tapPending; tapPending = [];
@@ -291,14 +313,22 @@ var Teacher = (function(){
       if(r && r.day){
         if(H1 && r.day.date === H1.date) H1 = r.day;   /* ホームの未提出も新しい表に */
         /* 返ってきた表が見ている日のもののときだけ反映（移動済みなら上書きしない） */
-        if(D.date === r.day.date){ D = r.day; if(tab === "day") show(); }
+        if(D.date === r.day.date){ D = r.day; keepPending(); if(tab === "day") show(); }
       }else{
-        return tcall("apiTeacherDay", D.date).then(function(r2){ D = r2; if(tab === "day") show(); });
+        return tcall("apiTeacherDay", D.date).then(function(r2){ D = r2; keepPending(); if(tab === "day") show(); });
       }
     }, function(){ loadDay(D.date); }).then(sendDone, sendDone);
   }
+  /* 送っている間に押した未保存の印を、届いた表の上に載せ直す */
+  function keepPending(){
+    tapPending.forEach(function(ev){
+      if(ev.date === D.date) D.cells[ev.no + ":" + ev.slot] = {state:ev.op === "off" ? "" : ev.op, via:"teacher", at:"", exempt:false};
+    });
+  }
   function sendDone(){
-    if(tapPending.length) sendTaps(); else tapBusy = false;
+    tapBusy = false;
+    if(tapPending.length && !tapT) flushTaps();   /* 日を移るなどで送りそびれた分 */
+    saveStUpdate();
   }
 
   /* ────────── 分析 ────────── */
@@ -612,7 +642,7 @@ var Teacher = (function(){
   function onClick(e){
     if(!active || !root.contains(e.target)) return;
     var tb = e.target.closest("[data-tab]");
-    if(tb){ tab = tb.getAttribute("data-tab"); logs = null; show(); return; }
+    if(tb){ flushTaps(); tab = tb.getAttribute("data-tab"); logs = null; show(); return; }
     var pk = e.target.closest("[data-abs]");
     if(pk){
       var on = pk.getAttribute("aria-pressed") !== "true";
@@ -648,7 +678,8 @@ var Teacher = (function(){
     try{ act(b.getAttribute("data-t"), b); } finally { busyBtn = null; }
   }
   function act(t, b){
-    if(t === "back") return back();
+    if(t === "back"){ flushTaps(); return back(); }
+    if(t === "save-marks") return flushTaps();
     if(t === "prev") return loadDay(Domain.addDays(D.date, -1));
     if(t === "next") return loadDay(Domain.addDays(D.date, 1));
     if(t === "today") return loadDay("");
@@ -709,6 +740,11 @@ var Teacher = (function(){
     if(e.target.id === "st-sort"){ sortBy = e.target.value; show(); }
     if(e.target.id === "st-item") return loadStats($("#st-from").value, $("#st-to").value, e.target.value);
     if(e.target.id === "sd-no"){ sdNo = Number(e.target.value); show(); }
+    if(e.target.id === "day-pick"){
+      var v = e.target.value, lo = Domain.yearStart(D.today);
+      if(v && v >= lo && v <= D.today) return loadDay(v);
+      e.target.value = D.date; toast("今年度（" + lo + "〜今日）の日を選んでください", true); return;
+    }
     if(e.target.matches("[data-slot]") || e.target.matches("[data-pslot]"))
       e.target.closest(".slot").classList.toggle("on", e.target.checked);
   }
@@ -716,8 +752,10 @@ var Teacher = (function(){
   document.addEventListener("change", onChange);
   /* 画面が見えている間に戻ったら、ホームの未提出をすぐ取り直す */
   document.addEventListener("visibilitychange", function(){
+    if(document.hidden) flushTaps();
     if(active && !document.hidden && tab === "home") homeTick();
   });
+  window.addEventListener("pagehide", flushTaps);
 
   function mount(el, o){
     root = el; opts = o || {}; active = true;
@@ -726,7 +764,7 @@ var Teacher = (function(){
     try{ bgTheme = localStorage.getItem("hs-bg") || "grad"; }catch(ignored){ bgTheme = "grad"; }
     show();
   }
-  function unmount(){ active = false; clearTimeout(homeT); }
+  function unmount(){ flushTaps(); active = false; clearTimeout(homeT); }
 
   return {mount:mount, unmount:unmount, back:back};
 })();

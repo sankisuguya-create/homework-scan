@@ -291,7 +291,11 @@ console.log("■ 先生が品目・名簿・過去の日を直す");
   ok("前の日の直しはあと勝ち（係の印を上書きする）",
      s.apiTeacherDay("2026-09-24").cells["2:1"].state === "forgot");
   ok("直す前の係の印は残らない（セル上書き）", s.P.rows("記録").filter(r => r[0] === "2026-09-24" && r[1] === "2")[0][2] === "*忘");
-  ok("8日より前は直せない", (s.apiMark([{id:"ev-past-02", date:"2026-09-10", no:1, slot:1, op:"on"}]), !s.P.rows("記録").some(r => r[0] === "2026-09-10")));
+  s.apiSaveDay("2026-05-12", [{slot:1, name:"漢字ドリル"}]);
+  s.apiMark([{id:"ev-past-02", date:"2026-05-12", no:1, slot:1, op:"on", via:"teacher"}]);
+  ok("先生は今年度の何か月も前の日も直せる", s.P.rows("記録").some(r => r[0] === "2026-05-12" && r[2] === "*○"));
+  s.apiSaveDay("2026-03-31", [{slot:1, name:"漢字ドリル"}]);
+  ok("前の年度の日は直せない", (s.apiMark([{id:"ev-past-04", date:"2026-03-31", no:1, slot:1, op:"on", via:"teacher"}]), !s.P.rows("記録").some(r => r[0] === "2026-03-31")));
 
   /* 名簿は「名簿」シートが正本（サイトでは編集しない）。算数TA式の列と旧式の両方を読む */
   s.P.replace("名簿", [["12345678@kyoiku.edu.nishi.or.jp", 3, 1, 2, "いし"],
