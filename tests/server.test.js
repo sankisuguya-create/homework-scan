@@ -520,4 +520,17 @@ console.log("■ 係の画面は 8:00〜14:00（日本時間）だけ");
      s.apiToday().date === "2026-09-28" && s.P.rows("記録").length === 1);
 }
 
+console.log("■ 今日と明日を1回で（apiTeacherHome）");
+{
+  const s = fresh();
+  const h = s.apiTeacherHome(true);
+  const d1 = s.Domain.schoolDay(s.today()), d2 = s.Domain.nextSchoolDay(d1);
+  ok("h1 は個別に取った今日と同じ", JSON.stringify(h.h1) === JSON.stringify(s.apiTeacherDay(d1)));
+  ok("h2 は個別に取った次の登校日と同じ", JSON.stringify(h.h2) === JSON.stringify(s.apiTeacherDay(d2)));
+  ok("版番号を返す", h.v === s.API_VER);
+  const n = s.P.rows("操作記録").length;
+  s.apiTeacherHome(false);
+  ok("2回目以降は開いた記録を書かない", s.P.rows("操作記録").length === n);
+}
+
 done();

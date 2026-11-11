@@ -100,15 +100,11 @@ var Teacher = (function(){
   }
   /* 今日と明日：土日はとばして、登校日どうしが続く（金曜→月曜）。
      週末に開いたときは「今日」欄に次の登校日が出る。 */
+  var homeOpened = false;
   function loadHome(){
     loading();
-    return tcall("apiTeacherDay", "").then(function(r1){
-      var d1 = Domain.schoolDay(r1.today);
-      if(d1 === r1.today){ H1 = r1; return null; }
-      return tcall("apiTeacherDay", d1).then(function(r){ H1 = r; });
-    }).then(function(){
-      return tcall("apiTeacherDay", Domain.nextSchoolDay(H1.date));
-    }).then(function(r2){ H2 = r2; show(); });
+    var first = !homeOpened; homeOpened = true;   /* 開いた記録は最初の1回だけ */
+    return tcall("apiTeacherHome", first).then(function(r){ H1 = r.h1; H2 = r.h2; show(); });
   }
   function loadSetup(){
     loading();

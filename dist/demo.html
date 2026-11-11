@@ -1035,8 +1035,11 @@ function helperState(ctx){
 /* 係の画面を使えるのは 8:00〜14:00（日本時間）。閉じている間は closed を返す。
    先生（staff）はいつでも見られる。端末側でも同じ時刻で閉じるので、
    オフラインでも「閉室中」にかわる。 */ 
-function apiToday(){
+function apiToday(opened){
   var who = guard();
+  /* 画面を開いた記録は doGet でなく最初の1回の呼び出しで書く
+     （doGet がシートを開かずに画面を返せるので、表示が早くなる） */
+  if(opened) try{ log("係の画面を開いた", "", who.email); }catch(err){}
   if(who.role === "helper" && !Domain.openAt(P.now())) return {closed:true, v:API_VER};
   return helperState();
 }
@@ -1200,6 +1203,23 @@ function teacherDay(date, ctx){
 function apiTeacherDay(date){
   teacher();
   return teacherDay(Domain.asDate(date) || today());
+}
+/* 「今日と明日」を1回で返す。以前は apiTeacherDay を2〜3回続けて呼び、
+   往復ごとに名簿・品目などを読み直していた。表は1回だけ読み、記録も2日分を1回で読む */
+function apiTeacherHome(opened){
+  var who = teacher();
+  if(opened) try{ log("先生の画面を開いた", "", who.email); }catch(err){}
+  var d1 = Domain.schoolDay(today()), d2 = Domain.nextSchoolDay(d1);
+  var ctx = {days:readDays(1), slots:readSlots(1), roster:readRoster(1),
+             absences:readAbsences(), exemptions:readExemptions(1)};
+  var evs = readEvents(d1, d2);
+  function on(d){
+    var c = {};
+    Object.keys(ctx).forEach(function(k){ c[k] = ctx[k]; });
+    c.events = evs.filter(function(e){ return e.date === d; });
+    return teacherDay(d, c);
+  }
+  return {v:API_VER, h1:on(d1), h2:on(d2)};
 }
 function apiSaveDay(date, items){
   teacher();
@@ -1566,7 +1586,7 @@ var google = {script: {run: (function(){
       withSuccessHandler: function(f){ return runner(f, ng); },
       withFailureHandler: function(f){ return runner(ok, f); }
     };
-    ["apiToday", "apiMark", "apiTeacherDay",
+    ["apiToday", "apiMark", "apiTeacherDay", "apiTeacherHome",
      "apiSaveDay", "apiSetAbsent", "apiSetup", "apiSaveSlots",
      "apiSaveExemptions", "apiSaveSettings", "apiStats", "apiLogs", "apiSaveHelpers"].forEach(function(name){
       r[name] = function(){
@@ -1903,10 +1923,13 @@ var Helper = (function(){
     });
   }
 
+  var openedSent = false;
   function sync(){
     if(busy) return Promise.resolve();
     busy = true;
-    var p = queue.length ? request("apiMark", [queue.slice(0, 200), Date.now()]) : request("apiToday");
+    var p;
+    if(queue.length) p = request("apiMark", [queue.slice(0, 200), Date.now()]);
+    else { p = request("apiToday", [!openedSent]); openedSent = true; }   /* 開いた記録は最初の1回だけ */
     return p.then(function(){ busy = false; if(queue.length) return sync(); },
                   function(){ busy = false; });
   }
@@ -2362,15 +2385,11 @@ var Teacher = (function(){
   }
   /* 今日と明日：土日はとばして、登校日どうしが続く（金曜→月曜）。
      週末に開いたときは「今日」欄に次の登校日が出る。 */
+  var homeOpened = false;
   function loadHome(){
     loading();
-    return tcall("apiTeacherDay", "").then(function(r1){
-      var d1 = Domain.schoolDay(r1.today);
-      if(d1 === r1.today){ H1 = r1; return null; }
-      return tcall("apiTeacherDay", d1).then(function(r){ H1 = r; });
-    }).then(function(){
-      return tcall("apiTeacherDay", Domain.nextSchoolDay(H1.date));
-    }).then(function(r2){ H2 = r2; show(); });
+    var first = !homeOpened; homeOpened = true;   /* 開いた記録は最初の1回だけ */
+    return tcall("apiTeacherHome", first).then(function(r){ H1 = r.h1; H2 = r.h2; show(); });
   }
   function loadSetup(){
     loading();
