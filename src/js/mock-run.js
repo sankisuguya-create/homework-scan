@@ -7,7 +7,7 @@ var google = {script: {run: (function(){
       withSuccessHandler: function(f){ return runner(f, ng); },
       withFailureHandler: function(f){ return runner(ok, f); }
     };
-    ["apiToday", "apiMark", "apiTeacherDay",
+    ["apiToday", "apiMark", "apiTeacherDay", "apiTeacherHome",
      "apiSaveDay", "apiSetAbsent", "apiSetup", "apiSaveSlots",
      "apiSaveExemptions", "apiSaveSettings", "apiStats", "apiLogs", "apiSaveHelpers"].forEach(function(name){
       r[name] = function(){

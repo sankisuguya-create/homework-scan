@@ -191,7 +191,6 @@ function doGet(e){
   if(w.role === "none") return Gate.denyPage(w);
   var q = (e && e.parameter) || {};
   var view = (w.role === "staff" && q.view === "teacher") ? "teacher" : "helper";
-  try{ log(view === "teacher" ? "先生の画面を開いた" : "係の画面を開いた", "", w.email); }catch(err){}
   var t = HtmlService.createTemplateFromFile("Index");
   t.boot = JSON.stringify({view:view, role:w.role, v:API_VER});
   return t.evaluate()

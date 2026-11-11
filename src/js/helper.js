@@ -112,10 +112,13 @@ var Helper = (function(){
     });
   }
 
+  var openedSent = false;
   function sync(){
     if(busy) return Promise.resolve();
     busy = true;
-    var p = queue.length ? request("apiMark", [queue.slice(0, 200), Date.now()]) : request("apiToday");
+    var p;
+    if(queue.length) p = request("apiMark", [queue.slice(0, 200), Date.now()]);
+    else { p = request("apiToday", [!openedSent]); openedSent = true; }   /* 開いた記録は最初の1回だけ */
     return p.then(function(){ busy = false; if(queue.length) return sync(); },
                   function(){ busy = false; });
   }

@@ -227,8 +227,11 @@ function helperState(ctx){
 /* 係の画面を使えるのは 8:00〜14:00（日本時間）。閉じている間は closed を返す。
    先生（staff）はいつでも見られる。端末側でも同じ時刻で閉じるので、
    オフラインでも「閉室中」にかわる。 */ 
-function apiToday(){
+function apiToday(opened){
   var who = guard();
+  /* 画面を開いた記録は doGet でなく最初の1回の呼び出しで書く
+     （doGet がシートを開かずに画面を返せるので、表示が早くなる） */
+  if(opened) try{ log("係の画面を開いた", "", who.email); }catch(err){}
   if(who.role === "helper" && !Domain.openAt(P.now())) return {closed:true, v:API_VER};
   return helperState();
 }
@@ -392,6 +395,23 @@ function teacherDay(date, ctx){
 function apiTeacherDay(date){
   teacher();
   return teacherDay(Domain.asDate(date) || today());
+}
+/* 「今日と明日」を1回で返す。以前は apiTeacherDay を2〜3回続けて呼び、
+   往復ごとに名簿・品目などを読み直していた。表は1回だけ読み、記録も2日分を1回で読む */
+function apiTeacherHome(opened){
+  var who = teacher();
+  if(opened) try{ log("先生の画面を開いた", "", who.email); }catch(err){}
+  var d1 = Domain.schoolDay(today()), d2 = Domain.nextSchoolDay(d1);
+  var ctx = {days:readDays(1), slots:readSlots(1), roster:readRoster(1),
+             absences:readAbsences(), exemptions:readExemptions(1)};
+  var evs = readEvents(d1, d2);
+  function on(d){
+    var c = {};
+    Object.keys(ctx).forEach(function(k){ c[k] = ctx[k]; });
+    c.events = evs.filter(function(e){ return e.date === d; });
+    return teacherDay(d, c);
+  }
+  return {v:API_VER, h1:on(d1), h2:on(d2)};
 }
 function apiSaveDay(date, items){
   teacher();
