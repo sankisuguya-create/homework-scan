@@ -381,7 +381,7 @@ var Helper = (function(){
     if(!root || !active) return;
     if(closedNow()){ root.innerHTML = closedHtml(); last = null; return; }
     if(netBlocked()){ root.innerHTML = offnetHtml(); last = null; return; }
-    if(!S){ root.innerHTML = '<div class="helper"><div class="none">' + icon("sync") + 'よみこみ中…</div></div>'; last = null; return; }
+    if(!S){ root.innerHTML = '<div class="helper"><div class="none">' + icon("sync") + 'よみこみ中<span class="ldots" aria-hidden="true"></span></div></div>'; last = null; return; }
     var cells = view(), abs = absView();
     var fp = fingerprint();
     if(last && last.fp === fp){ diffApply(cells, abs); return; }
