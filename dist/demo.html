@@ -345,6 +345,11 @@ textarea{border:var(--thin);border-radius:6px;padding:10px;font-size:18px;width:
   #hs-print .sdtbl th,#hs-print .sdtbl td{border:1.5px solid #000}
   .pp-note{font-size:12px;margin-top:8px}
 }
+/* 待ちの表示：点を0〜3個で回す（正本は - の skills/ui-layout/SKILL.md「待ちの表示」） */
+.ldots{display:inline-block;width:1.6em;text-align:left}
+.ldots::after{content:'';animation:ldots 1.2s steps(1,end) infinite}
+@keyframes ldots{0%{content:''}25%{content:'.'}50%{content:'..'}75%{content:'...'}}
+@media (prefers-reduced-motion:reduce){.ldots::after{animation:none;content:'...'}}
 </style>
 </head>
 <body>
@@ -2192,7 +2197,7 @@ var Helper = (function(){
     if(!root || !active) return;
     if(closedNow()){ root.innerHTML = closedHtml(); last = null; return; }
     if(netBlocked()){ root.innerHTML = offnetHtml(); last = null; return; }
-    if(!S){ root.innerHTML = '<div class="helper"><div class="none">' + icon("sync") + 'よみこみ中…</div></div>'; last = null; return; }
+    if(!S){ root.innerHTML = '<div class="helper"><div class="none">' + icon("sync") + 'よみこみ中<span class="ldots" aria-hidden="true"></span></div></div>'; last = null; return; }
     var cells = view(), abs = absView();
     var fp = fingerprint();
     if(last && last.fp === fp){ diffApply(cells, abs); return; }
@@ -2307,7 +2312,7 @@ var Teacher = (function(){
   var busyBtn = null, busyHtml = "";
   function tcall(name){
     var b = busyBtn, keep = b ? b.innerHTML : "";
-    if(b){ b.disabled = true; b.classList.add("busy"); b.innerHTML = icon("sync") + "処理中…"; }
+    if(b){ b.disabled = true; b.classList.add("busy"); b.innerHTML = icon("sync") + "処理中<span class=\"ldots\" aria-hidden=\"true\"></span>"; }
     return call.apply(null, arguments).catch(function(err){
       if(b && b.isConnected){ b.disabled = false; b.classList.remove("busy"); b.innerHTML = keep; }
       toast(errText(err), true); throw err;
@@ -2332,7 +2337,7 @@ var Teacher = (function(){
       + '<div class="tabs" role="tablist">' + t + '</div>'
       + '<div class="tbody">' + body + '</div></div>';
   }
-  function loading(){ frame('<div class="empty-msg">' + icon("sync") + ' 読み込み中…</div>'); }
+  function loading(){ frame('<div class="empty-msg">' + icon("sync") + ' 読み込み中<span class="ldots" aria-hidden="true"></span></div>'); }
 
   function show(){
     if(!active) return;
@@ -2559,11 +2564,11 @@ var Teacher = (function(){
      日・タブを移る前と画面を隠す前にも送る */
   var seq = 0, tapBusy = false, tapPending = [], tapT = null, SAVE_WAIT = 2000;
   function saveStText(){
-    return tapPending.length ? "未保存 " + tapPending.length + " マス（2秒後に保存）" : tapBusy ? "保存中…" : "保存済み";
+    return tapPending.length ? "未保存 " + tapPending.length + " マス（2秒後に保存）" : tapBusy ? "保存中<span class=\"ldots\" aria-hidden=\"true\"></span>" : "保存済み"; /* HTML を返す（保存中の点） */
   }
   function saveStUpdate(){
     var el = $("#save-st", root), b = $('[data-t="save-marks"]', root);
-    if(el) el.textContent = saveStText();
+    if(el) el.innerHTML = saveStText();
     if(b) b.disabled = !tapPending.length;
   }
   function flushTaps(){

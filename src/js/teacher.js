@@ -22,7 +22,7 @@ var Teacher = (function(){
   var busyBtn = null, busyHtml = "";
   function tcall(name){
     var b = busyBtn, keep = b ? b.innerHTML : "";
-    if(b){ b.disabled = true; b.classList.add("busy"); b.innerHTML = icon("sync") + "処理中…"; }
+    if(b){ b.disabled = true; b.classList.add("busy"); b.innerHTML = icon("sync") + "処理中<span class=\"ldots\" aria-hidden=\"true\"></span>"; }
     return call.apply(null, arguments).catch(function(err){
       if(b && b.isConnected){ b.disabled = false; b.classList.remove("busy"); b.innerHTML = keep; }
       toast(errText(err), true); throw err;
@@ -47,7 +47,7 @@ var Teacher = (function(){
       + '<div class="tabs" role="tablist">' + t + '</div>'
       + '<div class="tbody">' + body + '</div></div>';
   }
-  function loading(){ frame('<div class="empty-msg">' + icon("sync") + ' 読み込み中…</div>'); }
+  function loading(){ frame('<div class="empty-msg">' + icon("sync") + ' 読み込み中<span class="ldots" aria-hidden="true"></span></div>'); }
 
   function show(){
     if(!active) return;
@@ -274,11 +274,11 @@ var Teacher = (function(){
      日・タブを移る前と画面を隠す前にも送る */
   var seq = 0, tapBusy = false, tapPending = [], tapT = null, SAVE_WAIT = 2000;
   function saveStText(){
-    return tapPending.length ? "未保存 " + tapPending.length + " マス（2秒後に保存）" : tapBusy ? "保存中…" : "保存済み";
+    return tapPending.length ? "未保存 " + tapPending.length + " マス（2秒後に保存）" : tapBusy ? "保存中<span class=\"ldots\" aria-hidden=\"true\"></span>" : "保存済み"; /* HTML を返す（保存中の点） */
   }
   function saveStUpdate(){
     var el = $("#save-st", root), b = $('[data-t="save-marks"]', root);
-    if(el) el.textContent = saveStText();
+    if(el) el.innerHTML = saveStText();
     if(b) b.disabled = !tapPending.length;
   }
   function flushTaps(){
