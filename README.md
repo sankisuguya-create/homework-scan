@@ -92,7 +92,7 @@
 
 1. 新しい Google スプレッドシートを作り、「拡張機能 → Apps Script」を開く
 2. `gas/` の中のファイルを、同じ名前で Apps Script に入れる
-   - `Api.gs` `Domain.gs` `Gate.gs` `Platform.gs`（スクリプト）
+   - `Api.gs` `Domain.gs` `Gate.gs` `Platform.gs` `Icon.gs`（スクリプト。Icon.gs はタブのアイコン。setupSheets を実行し直すとドライブの権限を求められるので承認する）
    - `Index.html`（HTML）
    - `appsscript.json`（「プロジェクトの設定 → マニフェストを表示」にしてから中身を入れ替える）
 3. エディタで関数 `setupSheets` を1回実行する（表が作られる）

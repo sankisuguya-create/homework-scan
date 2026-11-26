@@ -181,6 +181,7 @@ function setupSheets(){
   var first = SpreadsheetApp.getActive().getSheetByName("シート1");
   if(first && first.getLastRow() === 0 && SpreadsheetApp.getActive().getSheets().length > 1)
     SpreadsheetApp.getActive().deleteSheet(first);
+  try { ensureIcon_(); } catch (e) { console.log("タブのアイコンを作れなかった: " + e.message); }
 }
 
 /* ------------------------------------------------------------------
@@ -193,8 +194,8 @@ function doGet(e){
   var view = (w.role === "staff" && q.view === "teacher") ? "teacher" : "helper";
   var t = HtmlService.createTemplateFromFile("Index");
   t.boot = JSON.stringify({view:view, role:w.role, v:API_VER});
-  return t.evaluate()
+  return withIcon_(t.evaluate()
     .setTitle("宿題チェック")
     .addMetaTag("viewport", "width=device-width, initial-scale=1")
-    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL));
 }
